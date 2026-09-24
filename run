@@ -1,0 +1,144 @@
+#!/usr/bin/env bash
+set -e
+
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+cd "$DIR"
+
+IMAGE_NAME="microbit-runner:latest"
+
+function print_help() {
+  echo "micro:bit Development & Testing CLI (Dockerized)"
+  echo ""
+  echo "Usage:"
+  echo "  ./run build-image        Build or rebuild the Docker test image"
+  echo "  ./run test [filter]      Run automated tests inside Docker (e.g., ./run test 01-blinking-heart)"
+  echo "  ./run typecheck          Run TypeScript typecheck across all projects"
+  echo "  ./run new <project_name> Scaffold a new project under projects/<project_name>"
+  echo "  ./run shell              Open an interactive bash shell inside the container"
+  echo "  ./run help               Show this help message"
+  echo ""
+}
+
+case "$1" in
+  build-image)
+    echo "🔨 Building Docker image: $IMAGE_NAME..."
+    docker compose build test
+    echo "✅ Docker image built successfully!"
+    ;;
+
+  test)
+    shift
+    FILTER="$1"
+    if [ -n "$FILTER" ]; then
+      echo "🧪 Running tests matching '$FILTER' in Docker..."
+      docker compose run --rm test vitest run "$FILTER"
+    else
+      echo "🧪 Running all tests in Docker..."
+      docker compose run --rm test vitest run
+    fi
+    ;;
+
+  typecheck)
+    echo "🔍 Running TypeScript typecheck in Docker..."
+    docker compose run --rm typecheck
+    ;;
+
+  shell)
+    echo "🐚 Opening shell inside container..."
+    docker compose run --rm test /bin/bash
+    ;;
+
+  new)
+    shift
+    NAME="$1"
+    if [ -z "$NAME" ]; then
+      echo "❌ Error: Project name is required. Example: ./run new 02-digital-dice"
+      exit 1
+    fi
+    TARGET_DIR="projects/$NAME"
+    if [ -d "$TARGET_DIR" ]; then
+      echo "❌ Error: Project '$TARGET_DIR' already exists."
+      exit 1
+    fi
+    mkdir -p "$TARGET_DIR"
+
+    # Create main.ts
+    cat << 'EOF' > "$TARGET_DIR/main.ts"
+// MakeCode TypeScript
+// Paste this code into the 'JavaScript' tab at https://makecode.microbit.org/
+
+export function onButtonA() {
+    basic.showString("A");
+}
+
+export function onButtonB() {
+    basic.showString("B");
+}
+
+input.onButtonPressed(Button.A, onButtonA);
+input.onButtonPressed(Button.B, onButtonB);
+
+basic.showIcon(IconNames.Heart);
+EOF
+
+    # Create main.test.ts
+    cat << 'EOF' > "$TARGET_DIR/main.test.ts"
+import { describe, it, expect, beforeEach } from 'vitest';
+import { microbit, Button } from '@shared/mocks/microbit';
+import * as app from './main';
+
+describe('Project Logic', () => {
+    beforeEach(() => {
+        microbit.reset();
+        input.onButtonPressed(Button.A, app.onButtonA);
+        input.onButtonPressed(Button.B, app.onButtonB);
+    });
+
+    it('handles button A press', () => {
+        microbit.input.pressButton(Button.A);
+        expect(microbit.basic.lastString).toBe('A');
+    });
+
+    it('handles button B press', () => {
+        microbit.input.pressButton(Button.B);
+        expect(microbit.basic.lastString).toBe('B');
+    });
+});
+EOF
+
+    # Create README.md
+    cat << EOF > "$TARGET_DIR/README.md"
+# $NAME
+
+## Description
+A micro:bit project built with MakeCode TypeScript.
+
+## How to Test
+Run locally via Docker:
+\`\`\`bash
+./run test $NAME
+\`\`\`
+
+## How to Run in MakeCode Simulator
+1. Open [makecode.microbit.org](https://makecode.microbit.org/)
+2. Switch to the **JavaScript** tab.
+3. Paste the contents of \`main.ts\`.
+4. Observe the interactive simulator!
+EOF
+
+    echo "✨ Successfully scaffolded project at $TARGET_DIR"
+    echo "   - $TARGET_DIR/main.ts"
+    echo "   - $TARGET_DIR/main.test.ts"
+    echo "   - $TARGET_DIR/README.md"
+    ;;
+
+  help|--help|-h|"")
+    print_help
+    ;;
+
+  *)
+    echo "Unknown command: $1"
+    print_help
+    exit 1
+    ;;
+esac

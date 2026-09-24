@@ -1,0 +1,22 @@
+services:
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: microbit-runner:latest
+    volumes:
+      - .:/workspace:cached
+      - node_modules:/workspace/node_modules
+    working_dir: /workspace
+    command: ["vitest", "run"]
+
+  typecheck:
+    image: microbit-runner:latest
+    volumes:
+      - .:/workspace:cached
+      - node_modules:/workspace/node_modules
+    working_dir: /workspace
+    command: ["tsc", "--noEmit"]
+
+volumes:
+  node_modules:

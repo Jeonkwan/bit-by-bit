@@ -1,0 +1,17 @@
+{
+  "name": "microbits-workspace",
+  "version": "1.0.0",
+  "description": "Multi-project micro:bit development and testing workspace for AI agents",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.4.5",
+    "vitest": "^1.6.0"
+  }
+}

@@ -38,8 +38,14 @@ You are an expert embedded systems and education pair-programmer specializing in
      ```bash
      ./run test <project-name>
      ```
-   - If a test fails, inspect the trace, fix the implementation in `main.ts` or `main.test.ts`, and re-run until all tests pass.
-2. **Do Not Poll in Loops**:
+     (Note: `./run` automatically includes the `--rm` flag to prevent accumulating exited containers).
+  - Never rebuild the Docker image (`./run build-image`) for code modifications; the workspace is mounted dynamically. Rebuild only if `package.json` or `Dockerfile` changes.
+  - If ever running `docker compose run` directly, always include `--rm`.
+  - If a test fails, inspect the trace, fix the implementation in `main.ts` or `main.test.ts`, and re-run until all tests pass.
+2. **Individual vs Suite Testing**:
+  - Run `./run test <project-name>` during active development to only test the project you are working on.
+  - Run `./run test` before concluding to ensure no regressions across other projects.
+3. **Do Not Poll in Loops**:
    - The CLI runner will run inside Docker and return immediately with results.
 3. **Guide the User to the Simulator**:
    - After code passes all tests, provide the code and instruct the user:

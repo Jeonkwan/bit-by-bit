@@ -25,7 +25,12 @@ This skill guides the agent in running automated tests across micro:bit projects
 ./run test
 ```
 
-### 3. Run Static Type Checking
+### 3. Container Lifecycle & Cleanup
+- The `./run` script automatically adds `--rm` to all `docker compose run` calls. This ensures every test container is cleanly removed immediately upon exit and no exited containers pile up.
+- If running raw docker commands manually, ALWAYS pass `--rm`.
+- Code changes in `projects/` are immediately mounted live—do NOT rebuild the container image when editing code.
+
+### 4. Run Static Type Checking
 ```bash
 ./run typecheck
 ```

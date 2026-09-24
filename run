@@ -13,9 +13,14 @@ function print_help() {
   echo "  ./run build-image        Build or rebuild the Docker test image"
   echo "  ./run test [filter]      Run automated tests inside Docker (e.g., ./run test 01-blinking-heart)"
   echo "  ./run typecheck          Run TypeScript typecheck across all projects"
+  echo "  ./run lint               Validate MakeCode Static TypeScript rules (no exports/imports)"
   echo "  ./run new <project_name> Scaffold a new project under projects/<project_name>"
-  echo "  ./run shell              Open an interactive bash shell inside the container"
-  echo "  ./run help               Show this help message"
+  echo "Hardware & Firmware Commands:"
+  echo "  ./run board              Detect USB-connected micro:bit board and port"
+  echo "  ./run flash <proj>       Flash cached binary (dist/<proj>/latest.hex) to micro:bit"
+  echo "  ./run cache <proj> [hex] Cache a .hex file with timestamp (YYYY-MM-DD_HHMM) in dist/"
+  echo "  ./run rollback <hex>     Extract source code (.ts) from .hex into rollbacks/<proj>_<time>/"
+  echo "  ./run monitor            Stream live serial output from connected micro:bit"
   echo ""
 }
 
@@ -43,9 +48,64 @@ case "$1" in
     docker compose run --rm typecheck
     ;;
 
+  lint)
+    echo "🔍 Validating MakeCode Static TypeScript compatibility across all projects..."
+    docker compose run --rm test vitest run shared/tests/makecode-compatibility.test.ts
+    ;;
+
   shell)
     echo "🐚 Opening shell inside container..."
     docker compose run --rm test /bin/bash
+    ;;
+
+  board|detect)
+    python3 scripts/board.py detect
+    ;;
+
+  flash)
+    shift
+    if [ -z "$1" ]; then
+      echo "❌ Error: Project name or hex path required. Example: ./run flash 01-blinking-heart"
+      exit 1
+    fi
+    python3 scripts/board.py flash "$1"
+    ;;
+
+  cache)
+    shift
+    PROJ="$1"
+    HEX_PATH="$2"
+    if [ -z "$PROJ" ]; then
+      echo "❌ Error: Project name required. Example: ./run cache 01-blinking-heart [optional_hex_path]"
+      exit 1
+    fi
+    # If no hex path given, check ~/Downloads/ for newest matching file
+    if [ -z "$HEX_PATH" ]; then
+      DOWNLOADED=$(find ~/Downloads -name "*${PROJ}*.hex" -o -name "microbit*.hex" 2>/dev/null | head -n 1)
+      if [ -n "$DOWNLOADED" ]; then
+        echo "🔍 Found downloaded hex file: $DOWNLOADED"
+        HEX_PATH="$DOWNLOADED"
+      else
+        echo "❌ Error: No hex path provided and no matching file found in ~/Downloads."
+        exit 1
+      fi
+    fi
+    python3 scripts/board.py cache "$PROJ" "$HEX_PATH"
+    ;;
+
+  rollback|extract)
+    shift
+    HEX_PATH="$1"
+    PROJ_NAME="$2"
+    if [ -z "$HEX_PATH" ]; then
+      echo "❌ Error: Path to .hex file required. Example: ./run rollback dist/01-blinking-heart/latest.hex"
+      exit 1
+    fi
+    python3 scripts/hex_converter.py "$HEX_PATH" "$PROJ_NAME"
+    ;;
+
+  monitor)
+    python3 scripts/board.py monitor
     ;;
 
   new)
@@ -67,11 +127,11 @@ case "$1" in
 // MakeCode TypeScript
 // Paste this code into the 'JavaScript' tab at https://makecode.microbit.org/
 
-export function onButtonA() {
+function onButtonA() {
     basic.showString("A");
 }
 
-export function onButtonB() {
+function onButtonB() {
     basic.showString("B");
 }
 
@@ -83,15 +143,21 @@ EOF
 
     # Create main.test.ts
     cat << 'EOF' > "$TARGET_DIR/main.test.ts"
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { microbit, Button } from '@shared/mocks/microbit';
-import * as app from './main';
+import { validateMakeCodeFile } from '@shared/testing/makecode-validator';
 
 describe('Project Logic', () => {
-    beforeEach(() => {
+    beforeEach(async () => {
         microbit.reset();
-        input.onButtonPressed(Button.A, app.onButtonA);
-        input.onButtonPressed(Button.B, app.onButtonB);
+        vi.resetModules();
+        await import('./main');
+    });
+
+    it('is valid MakeCode TypeScript (no top-level exports or imports)', () => {
+        const result = validateMakeCodeFile(new URL('./main.ts', import.meta.url).pathname);
+        expect(result.errors).toEqual([]);
+        expect(result.valid).toBe(true);
     });
 
     it('handles button A press', () => {

@@ -10,7 +10,7 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     setupFiles: [path.resolve(__dirname, 'shared/mocks/setup.ts')],
-    include: ['projects/**/*.test.ts'],
+    include: ['projects/**/*.test.ts', 'shared/**/*.test.ts'],
   },
   resolve: {
     alias: {

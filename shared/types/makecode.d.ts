@@ -83,6 +83,31 @@ declare enum AnalogPin {
     P10 = 110,
 }
 
+declare enum TouchPin {
+    P0 = 0,
+    P1 = 1,
+    P2 = 2,
+}
+
+declare enum TouchTarget {
+    P0 = 0,
+    P1 = 1,
+    P2 = 2,
+    LOGO = 3,
+}
+
+declare enum TouchTargetMode {
+    Resistive = 0,
+    Capacitive = 1,
+}
+
+declare enum TouchButtonEvent {
+    Touched = 0,
+    Released = 1,
+    Pressed = 3,
+    LongPressed = 4,
+}
+
 declare enum Direction {
     Right = 90,
     Left = -90,
@@ -110,6 +135,11 @@ declare namespace input {
     function onButtonPressed(button: Button, handler: () => void): void;
     function onGesture(gesture: Gesture, handler: () => void): void;
     function buttonIsPressed(button: Button): boolean;
+    function onPinPressed(pin: TouchPin, handler: () => void): void;
+    function onPinReleased(pin: TouchPin, handler: () => void): void;
+    function pinIsPressed(pin: TouchPin): boolean;
+    function onLogoEvent(action: TouchButtonEvent, handler: () => void): void;
+    function logoIsPressed(): boolean;
     function temperature(): number;
     function lightLevel(): number;
     function compassHeading(): number;
@@ -130,6 +160,7 @@ declare namespace music {
     function playTone(frequency: number, duration: number): void;
     function ringTone(frequency: number): void;
     function rest(duration: number): void;
+    function stopAllSounds(): void;
     function setVolume(volume: number): void;
     function volume(): number;
     function setTempo(bpm: number): void;
@@ -179,6 +210,7 @@ declare namespace pins {
     function analogWritePin(name: AnalogPin, value: number): void;
     function servoWritePin(name: AnalogPin, degrees: number): void;
     function map(value: number, fromLow: number, fromHigh: number, toLow: number, toHigh: number): number;
+    function touchSetMode(name: TouchTarget, mode: TouchTargetMode): void;
 }
 
 declare namespace serial {

@@ -5,6 +5,10 @@ import {
     Gesture,
     DigitalPin,
     AnalogPin,
+    TouchPin,
+    TouchTarget,
+    TouchTargetMode,
+    TouchButtonEvent,
     Direction,
     LedSpriteProperty,
 } from './microbit';
@@ -25,6 +29,10 @@ import {
 (globalThis as any).Gesture = Gesture;
 (globalThis as any).DigitalPin = DigitalPin;
 (globalThis as any).AnalogPin = AnalogPin;
+(globalThis as any).TouchPin = TouchPin;
+(globalThis as any).TouchTarget = TouchTarget;
+(globalThis as any).TouchTargetMode = TouchTargetMode;
+(globalThis as any).TouchButtonEvent = TouchButtonEvent;
 (globalThis as any).Direction = Direction;
 (globalThis as any).LedSpriteProperty = LedSpriteProperty;
 (globalThis as any).randint = (min: number, max: number) => microbit.randint(min, max);

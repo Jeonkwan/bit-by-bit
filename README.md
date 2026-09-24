@@ -15,7 +15,8 @@ microbits/
 │   ├── microbit-container-builder/          # Manage & build the Docker test environment
 │   ├── microbit-project-creator/            # Scaffold new micro:bit projects
 │   ├── microbit-test-runner/                # Run & diagnose in-container tests
-│   └── microbit-makecode-guide/             # MakeCode API reference & coding patterns
+│   ├── microbit-makecode-guide/             # MakeCode API reference & coding patterns
+│   └── microbit-board-flasher/              # Hardware flash, dist caching, rollback & serial
 │
 ├── shared/                                  # Shared test infrastructure
 │   ├── types/makecode.d.ts                  # Type definitions for MakeCode global APIs
@@ -26,6 +27,16 @@ microbits/
 │       ├── main.ts                          # Copy-pasteable into MakeCode website
 │       ├── main.test.ts                     # Automated Vitest unit tests
 │       └── README.md                        # Project notes & instructions
+│
+├── dist/                                    # Compiled .hex binary cache
+│   └── 01-blinking-heart/                   # Timestamp versions: <project>_<YYYY-MM-DD_HHMM>.hex
+│
+├── rollbacks/                               # Reversed source code from .hex files
+│   └── <project>_<YYYY-MM-DD_HHMM>/         # Extracted main.ts, pxt.json, and metadata
+│
+├── scripts/                                 # Host automation scripts
+│   ├── board.py                             # USB hardware detection, flashing, and serial
+│   └── hex_converter.py                     # Reverse Universal Hex -> TypeScript (LZMA)
 │
 ├── Dockerfile                               # Node 20 LTS testing environment
 ├── docker-compose.yml                       # Docker orchestration & volume mounts
@@ -60,6 +71,46 @@ Scaffold a new project folder with boilerplate code, tests, and documentation:
 
 ---
 
+## Physical Hardware & Deployment
+
+### Detect Connected micro:bit
+```bash
+./run board
+```
+Detects board version (e.g. V2.2), unique board ID, DAPLink firmware version, and USB serial COM port (`/dev/cu.usbmodem*`).
+
+### Cache Compiled Binaries (`dist/`)
+Cache a compiled `.hex` file downloaded from the MakeCode editor:
+```bash
+# Automatically finds microbit-<project>.hex in ~/Downloads
+./run cache 01-blinking-heart
+
+# Or specify a hex file path directly
+./run cache 01-blinking-heart path/to/my-code.hex
+```
+Saves immutable timestamp versions to `dist/<project>/<project>_<YYYY-MM-DD_HHMM>.hex` and links `latest.hex`.
+
+### Flash Hardware via USB
+```bash
+./run flash 01-blinking-heart
+```
+Flashes the latest cached binary directly to `/Volumes/MICROBIT` and monitors DAPLink reboot.
+
+### Reverse Convert `.hex` to `.ts` (`rollbacks/`)
+Convert any MakeCode Universal Hex file back into readable TypeScript source code:
+```bash
+./run rollback dist/01-blinking-heart/latest.hex
+```
+Extracts `main.ts`, `pxt.json`, and project metadata into `rollbacks/<project>_<YYYY-MM-DD_HHMM>/`.
+
+### Real-Time Serial Monitor
+Stream live serial logs (`serial.writeLine(...)`) from the board over USB:
+```bash
+./run monitor
+```
+
+---
+
 ## How to Simulate on MakeCode Web
 
 1. Open [makecode.microbit.org](https://makecode.microbit.org/) in your browser.
@@ -74,9 +125,11 @@ Scaffold a new project folder with boilerplate code, tests, and documentation:
 ## Working with Antigravity AI Agents
 
 This workspace is fully configured for Google Antigravity:
-- **`AGENTS.md`**: Enforces MakeCode TypeScript rules and requires that all code must pass `./run test <project>` in Docker before being presented to you.
+- **`AGENTS.md`**: Enforces MakeCode TypeScript rules, containerized testing, timestamp binary caching, and dedicated rollback directories.
 - **Custom Skills in `.agents/skills/`**:
   - `microbit-container-builder`: Teaches the agent to manage Docker images.
   - `microbit-project-creator`: Teaches the agent to scaffold new projects.
   - `microbit-test-runner`: Teaches the agent how to run tests and self-correct on failure.
   - `microbit-makecode-guide`: Provides complete MakeCode API definitions and patterns.
+  - `microbit-board-flasher`: Handles board detection, caching, flashing, rollbacks, and serial monitoring.
+

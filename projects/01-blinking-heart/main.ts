@@ -7,9 +7,9 @@
  * Press Button B to clear screen.
  */
 
-export let isBigHeart = true;
+let isBigHeart = true;
 
-export function toggleHeart() {
+function toggleHeart() {
     isBigHeart = !isBigHeart;
     if (isBigHeart) {
         basic.showIcon(IconNames.Heart);
@@ -18,7 +18,7 @@ export function toggleHeart() {
     }
 }
 
-export function clearDisplay() {
+function clearDisplay() {
     basic.clearScreen();
 }
 

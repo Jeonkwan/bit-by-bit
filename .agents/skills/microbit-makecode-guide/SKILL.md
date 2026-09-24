@@ -43,3 +43,15 @@ Before designing, brainstorming, or writing code, read the specific reference fi
    Use `basic.pause(ms)` for time delays and `input.onButtonPressed(...)` for events.
 3. **Random Numbers**:
    Use `randint(min, max)` to generate integers between `min` and `max` inclusive.
+4. **CRITICAL: NEVER Use `export` or `import`**:
+   - MakeCode programs run in a unified top-level project scope where all top-level symbols are already visible.
+   - Writing `export` at top level causes compiler error:
+     *"all symbols in the top level scope are always exported. Please use a namespace if you want to export only some."*
+   - Writing `import` statements causes compiler errors because modules are not resolved via ES module specifiers in MakeCode user scripts.
+   - Always declare top-level functions and variables directly without `export`:
+     ```typescript
+     let score = 0;
+     function addPoint() {
+         score++;
+     }
+     ```

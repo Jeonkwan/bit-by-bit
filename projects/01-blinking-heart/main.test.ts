@@ -1,13 +1,22 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { microbit, IconNames, Button } from '@shared/mocks/microbit';
-import * as app from './main';
+import { validateMakeCodeFile } from '@shared/testing/makecode-validator';
 
 describe('01-Blinking-Heart Project', () => {
-    beforeEach(() => {
+    beforeEach(async () => {
         microbit.reset();
-        // Re-register events from main.ts
-        input.onButtonPressed(Button.A, () => app.toggleHeart());
-        input.onButtonPressed(Button.B, () => app.clearDisplay());
+        vi.resetModules();
+        await import('./main');
+    });
+
+    it('is valid MakeCode TypeScript (no top-level exports or imports)', () => {
+        const result = validateMakeCodeFile(new URL('./main.ts', import.meta.url).pathname);
+        expect(result.errors).toEqual([]);
+        expect(result.valid).toBe(true);
+    });
+
+    it('shows big heart on initial startup', () => {
+        expect(microbit.lastIcon).toBe(IconNames.Heart);
     });
 
     it('toggles heart on Button A press', () => {

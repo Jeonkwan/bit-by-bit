@@ -79,6 +79,31 @@ export enum AnalogPin {
     P10 = 110,
 }
 
+export enum TouchPin {
+    P0 = 0,
+    P1 = 1,
+    P2 = 2,
+}
+
+export enum TouchTarget {
+    P0 = 0,
+    P1 = 1,
+    P2 = 2,
+    LOGO = 3,
+}
+
+export enum TouchTargetMode {
+    Resistive = 0,
+    Capacitive = 1,
+}
+
+export enum TouchButtonEvent {
+    Touched = 0,
+    Released = 1,
+    Pressed = 3,
+    LongPressed = 4,
+}
+
 export enum Direction {
     Right = 90,
     Left = -90,
@@ -169,12 +194,20 @@ export class MockMicroBit {
     public Gesture = Gesture;
     public DigitalPin = DigitalPin;
     public AnalogPin = AnalogPin;
+    public TouchPin = TouchPin;
+    public TouchTarget = TouchTarget;
+    public TouchTargetMode = TouchTargetMode;
+    public TouchButtonEvent = TouchButtonEvent;
     public Direction = Direction;
     public LedSpriteProperty = LedSpriteProperty;
 
     public screen: number[][] = Array.from({ length: 5 }, () => Array(5).fill(0));
     public buttonHandlers: Map<Button, Array<() => void>> = new Map();
     public gestureHandlers: Map<Gesture, Array<() => void>> = new Map();
+    public pinPressedHandlers: Map<TouchPin, Array<() => void>> = new Map();
+    public pinReleasedHandlers: Map<TouchPin, Array<() => void>> = new Map();
+    public logoEventHandlers: Map<TouchButtonEvent, Array<() => void>> = new Map();
+    public pinModes: Map<TouchTarget | TouchPin, TouchTargetMode> = new Map();
     public foreverHandlers: Array<() => void> = [];
 
     // History and telemetry
@@ -210,16 +243,26 @@ export class MockMicroBit {
     public currentTemperature: number = 21;
     public currentLightLevel: number = 128;
     public currentCompassHeading: number = 0;
+    public isLogoPressed: boolean = false;
     public buttonState: Map<Button, boolean> = new Map([
         [Button.A, false],
         [Button.B, false],
         [Button.AB, false],
+    ]);
+    public pinTouchState: Map<TouchPin, boolean> = new Map([
+        [TouchPin.P0, false],
+        [TouchPin.P1, false],
+        [TouchPin.P2, false],
     ]);
 
     public reset() {
         this.screen = Array.from({ length: 5 }, () => Array(5).fill(0));
         this.buttonHandlers.clear();
         this.gestureHandlers.clear();
+        this.pinPressedHandlers.clear();
+        this.pinReleasedHandlers.clear();
+        this.logoEventHandlers.clear();
+        this.pinModes.clear();
         this.foreverHandlers = [];
         this.lastIcon = null;
         this.lastString = null;
@@ -231,9 +274,13 @@ export class MockMicroBit {
         this.currentTemperature = 21;
         this.currentLightLevel = 128;
         this.currentCompassHeading = 0;
+        this.isLogoPressed = false;
         this.buttonState.set(Button.A, false);
         this.buttonState.set(Button.B, false);
         this.buttonState.set(Button.AB, false);
+        this.pinTouchState.set(TouchPin.P0, false);
+        this.pinTouchState.set(TouchPin.P1, false);
+        this.pinTouchState.set(TouchPin.P2, false);
 
         this.radioGroup = 0;
         this.sentRadioPackets = [];
@@ -306,6 +353,25 @@ export class MockMicroBit {
         buttonIsPressed: (button: Button) => {
             return this.buttonState.get(button) || false;
         },
+        onPinPressed: (pin: TouchPin, handler: () => void) => {
+            const handlers = this.pinPressedHandlers.get(pin) || [];
+            handlers.push(handler);
+            this.pinPressedHandlers.set(pin, handlers);
+        },
+        onPinReleased: (pin: TouchPin, handler: () => void) => {
+            const handlers = this.pinReleasedHandlers.get(pin) || [];
+            handlers.push(handler);
+            this.pinReleasedHandlers.set(pin, handlers);
+        },
+        pinIsPressed: (pin: TouchPin) => {
+            return this.pinTouchState.get(pin) || false;
+        },
+        onLogoEvent: (action: TouchButtonEvent, handler: () => void) => {
+            const handlers = this.logoEventHandlers.get(action) || [];
+            handlers.push(handler);
+            this.logoEventHandlers.set(action, handlers);
+        },
+        logoIsPressed: () => this.isLogoPressed,
         temperature: () => this.currentTemperature,
         lightLevel: () => this.currentLightLevel,
         compassHeading: () => this.currentCompassHeading,
@@ -325,6 +391,26 @@ export class MockMicroBit {
             for (const h of handlers) {
                 h();
             }
+        },
+        pressPin: (pin: TouchPin) => {
+            this.pinTouchState.set(pin, true);
+            const handlers = this.pinPressedHandlers.get(pin) || [];
+            for (const h of handlers) {
+                h();
+            }
+            this.pinTouchState.set(pin, false);
+            const relHandlers = this.pinReleasedHandlers.get(pin) || [];
+            for (const h of relHandlers) {
+                h();
+            }
+        },
+        touchLogo: (action: TouchButtonEvent = TouchButtonEvent.Pressed) => {
+            this.isLogoPressed = true;
+            const handlers = this.logoEventHandlers.get(action) || [];
+            for (const h of handlers) {
+                h();
+            }
+            this.isLogoPressed = false;
         },
     };
 
@@ -357,6 +443,7 @@ export class MockMicroBit {
             this.tonesPlayed.push({ frequency, duration: 0 });
         },
         rest: (_duration: number) => {},
+        stopAllSounds: () => {},
         setVolume: (_vol: number) => {},
         volume: () => 255,
         setTempo: (_bpm: number) => {},
@@ -445,6 +532,9 @@ export class MockMicroBit {
         },
         map: (val: number, fromLow: number, fromHigh: number, toLow: number, toHigh: number) => {
             return toLow + ((val - fromLow) * (toHigh - toLow)) / (fromHigh - fromLow);
+        },
+        touchSetMode: (name: TouchTarget, mode: TouchTargetMode) => {
+            this.pinModes.set(name, mode);
         },
     };
 

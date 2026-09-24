@@ -28,6 +28,31 @@ You are an expert embedded systems and education pair-programmer specializing in
 2. **Avoid Unsupported JS Features**:
    - Do NOT use dynamic reflection, `eval()`, `Object.keys()` dynamic manipulation, or arbitrary web APIs (DOM, `window`, `fetch`).
    - Use standard typed functions, strict types, and event-driven patterns.
+3. **CRITICAL: NEVER Use `export` or `import` in `main.ts`**:
+   - In MakeCode, all top-level symbols (variables, functions, classes) are implicitly global within the project.
+   - Using `export` at the top level causes MakeCode compilation error:
+     `"all symbols in the top level scope are always exported. Please use a namespace if you want to export only some."`
+   - Never write `export` or `import` in `main.ts`. Write plain top-level variables and functions:
+     ```typescript
+     let isBigHeart = true;
+     function toggleHeart() { ... }
+     ```
+   - In `main.test.ts`, do NOT use named imports from `./main`. Instead, simulate how real micro:bit hardware boots up:
+     ```typescript
+     beforeEach(async () => {
+         microbit.reset();
+         vi.resetModules();
+         await import('./main');
+     });
+     ```
+   - Always include the MakeCode validation test in `main.test.ts`:
+     ```typescript
+     it('is valid MakeCode TypeScript (no top-level exports or imports)', () => {
+         const result = validateMakeCodeFile(new URL('./main.ts', import.meta.url).pathname);
+         expect(result.errors).toEqual([]);
+         expect(result.valid).toBe(true);
+     });
+     ```
 
 ---
 
@@ -45,6 +70,8 @@ You are an expert embedded systems and education pair-programmer specializing in
 2. **Individual vs Suite Testing**:
   - Run `./run test <project-name>` during active development to only test the project you are working on.
   - Run `./run test` before concluding to ensure no regressions across other projects.
+  - Run `./run lint` to validate MakeCode Static TypeScript rules (no exports/imports) across all projects.
+  - Run `./run typecheck` to verify TypeScript types without emitting code.
 3. **Do Not Poll in Loops**:
    - The CLI runner will run inside Docker and return immediately with results.
 3. **Guide the User to the Simulator**:
@@ -52,3 +79,38 @@ You are an expert embedded systems and education pair-programmer specializing in
      - Open [makecode.microbit.org](https://makecode.microbit.org/)
      - Switch to the **JavaScript** tab
      - Paste `main.ts` to watch it run in the interactive simulator!
+
+---
+
+## 4. Hardware Deployment, Binary Caching & Hex Rollbacks
+
+1. **Board Detection & Hardware Status**:
+   - Detect connected physical micro:bit boards via `./run board`.
+   - Reads `DETAILS.TXT` to determine board version (e.g. V2.2), unique board ID, DAPLink version, and serial COM port (`/dev/cu.usbmodem*`).
+2. **Binary Caching with Timestamp Versions (`dist/`)**:
+   - Cache compiled `.hex` files with human-readable timestamps (`YYYY-MM-DD_HHMM`):
+     ```bash
+     ./run cache <project-name> [path/to/hex]
+     ```
+   - Binaries are stored at `dist/<project>/<project>_<YYYY-MM-DD_HHMM>.hex` alongside `dist/<project>/latest.hex`.
+   - Allows instant flashing across multiple boards without recompiling.
+3. **Flashing Hardware**:
+   - Flash cached project binaries to connected micro:bits via:
+     ```bash
+     ./run flash <project-name>
+     ```
+   - Monitors unmount/remount cycles during the DAPLink flashing process.
+4. **Hex to TypeScript Rollback Extraction (`rollbacks/`)**:
+   - Convert MakeCode Universal Hex files back into original `.ts` source code:
+     ```bash
+     ./run rollback <path-to-hex-file> [project-name]
+     ```
+   - All rollback conversions MUST be output into a dedicated rollback directory with the format:
+     `rollbacks/<project-name>_<YYYY-MM-DD_HHMM>/`
+   - Reconstructs `main.ts`, `pxt.json`, and `metadata.json` directly from MakeCode's embedded LZMA compressed source chunks.
+5. **Live Serial Monitor**:
+   - Stream real-time telemetry and debug output from the micro:bit:
+     ```bash
+     ./run monitor [baud-rate]
+     ```
+

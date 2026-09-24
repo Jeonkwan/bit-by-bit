@@ -35,7 +35,18 @@ This skill guides the agent in running automated tests across micro:bit projects
 ./run typecheck
 ```
 
+### 5. Validate MakeCode Static TypeScript Rules
+```bash
+./run lint
+```
+Runs automated checks across all projects to ensure no top-level `export` or `import` statements exist.
+
 ## Diagnosing Test Failures
+- **MakeCode Top-Level Export / Import Failure**:
+  If a test fails with *"Top-level 'export' found"* or *"File is not a module"*:
+  1. Remove `export` keywords from `main.ts`.
+  2. In `main.test.ts`, do NOT use named imports (`import * as app from './main'`).
+  3. Instead, simulate hardware boot in `beforeEach(async () => { microbit.reset(); vi.resetModules(); await import('./main'); });`.
 - **Assertion Failure on Icon**:
   Check `microbit.lastIcon` vs `IconNames.<Target>`. Ensure the button handler was triggered properly.
 - **LED Pixel Check**:

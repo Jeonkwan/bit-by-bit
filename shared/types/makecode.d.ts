@@ -1,5 +1,7 @@
 // MakeCode micro:bit global type declarations
 
+declare function randint(min: number, max: number): number;
+
 declare enum IconNames {
     Heart = 0,
     SmallHeart = 1,
@@ -63,6 +65,37 @@ declare enum Gesture {
     EightG = 10,
 }
 
+declare enum DigitalPin {
+    P0 = 100,
+    P1 = 101,
+    P2 = 102,
+    P8 = 108,
+    P12 = 112,
+    P16 = 116,
+}
+
+declare enum AnalogPin {
+    P0 = 100,
+    P1 = 101,
+    P2 = 102,
+    P3 = 103,
+    P4 = 104,
+    P10 = 110,
+}
+
+declare enum Direction {
+    Right = 90,
+    Left = -90,
+}
+
+declare enum LedSpriteProperty {
+    X = 0,
+    Y = 1,
+    Direction = 2,
+    Brightness = 3,
+    Blink = 4,
+}
+
 declare namespace basic {
     function showIcon(icon: IconNames, interval?: number): void;
     function showString(text: string, interval?: number): void;
@@ -97,9 +130,73 @@ declare namespace music {
     function playTone(frequency: number, duration: number): void;
     function ringTone(frequency: number): void;
     function rest(duration: number): void;
+    function setVolume(volume: number): void;
+    function volume(): number;
+    function setTempo(bpm: number): void;
+    function tempo(): number;
+}
+
+declare namespace radio {
+    function setGroup(id: number): void;
+    function sendNumber(value: number): void;
+    function sendString(msg: string): void;
+    function sendValue(name: string, value: number): void;
+    function onReceivedNumber(handler: (receivedNumber: number) => void): void;
+    function onReceivedString(handler: (receivedString: string) => void): void;
+    function onReceivedValue(handler: (name: string, value: number) => void): void;
+    function setTransmitPower(power: number): void;
+}
+
+declare namespace game {
+    interface LedSprite {
+        move(leds: number): void;
+        turn(direction: Direction, degrees: number): void;
+        ifOnEdgeBounce(): void;
+        get(property: LedSpriteProperty): number;
+        set(property: LedSpriteProperty, value: number): void;
+        change(property: LedSpriteProperty, value: number): void;
+        isTouching(other: LedSprite): boolean;
+        isTouchingEdge(): boolean;
+        delete(): void;
+    }
+
+    function createSprite(x: number, y: number): LedSprite;
+    function addScore(points: number): void;
+    function score(): number;
+    function setScore(score: number): void;
+    function setLife(lives: number): void;
+    function addLife(lives: number): void;
+    function removeLife(lives: number): void;
+    function startCountdown(ms: number): void;
+    function gameOver(): void;
+    function isGameOver(): boolean;
+}
+
+declare namespace pins {
+    function digitalReadPin(name: DigitalPin): number;
+    function digitalWritePin(name: DigitalPin, value: number): void;
+    function analogReadPin(name: AnalogPin): number;
+    function analogWritePin(name: AnalogPin, value: number): void;
+    function servoWritePin(name: AnalogPin, degrees: number): void;
+    function map(value: number, fromLow: number, fromHigh: number, toLow: number, toHigh: number): number;
+}
+
+declare namespace serial {
+    function writeLine(text: string): void;
+    function writeNumber(value: number): void;
+    function writeValue(name: string, value: number): void;
+    function writeString(text: string): void;
+    function readLine(): string;
+    function readString(): string;
+    function redirectToUSB(): void;
 }
 
 declare namespace control {
     function millis(): number;
+    function micros(): number;
+    function waitMicros(micros: number): void;
     function reset(): void;
+    function deviceName(): string;
+    function deviceSerialNumber(): number;
+    function inBackground(body: () => void): void;
 }

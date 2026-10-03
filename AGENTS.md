@@ -82,26 +82,26 @@ You are an expert embedded systems and education pair-programmer specializing in
 
 ---
 
-## 4. Hardware Deployment, Binary Caching & Hex Rollbacks
+## 4. Compilation, Hardware Deployment & Hex Rollbacks
 
-1. **Board Detection & Hardware Status**:
+1. **Containerized MakeCode Compilation & Binary Caching (`dist/`)**:
+   - Compile TypeScript to Universal Hex (`.hex`) inside Docker and auto-cache:
+     ```bash
+     ./run compile <project-name>
+     ```
+   - Automatically outputs timestamp version `dist/<project>/<project>_<YYYY-MM-DD_HHMM>.hex` and `dist/<project>/latest.hex`.
+   - Embeds original source code with LZMA compression into Intel HEX custom 0x0D records for full reversibility.
+2. **Board Detection & Hardware Status**:
    - Detect connected physical micro:bit boards via `./run board`.
    - Reads `DETAILS.TXT` to determine board version (e.g. V2.2), unique board ID, DAPLink version, and serial COM port (`/dev/cu.usbmodem*`).
-2. **Binary Caching with Timestamp Versions (`dist/`)**:
-   - Cache compiled `.hex` files with human-readable timestamps (`YYYY-MM-DD_HHMM`):
-     ```bash
-     ./run cache <project-name> [path/to/hex]
-     ```
-   - Binaries are stored at `dist/<project>/<project>_<YYYY-MM-DD_HHMM>.hex` alongside `dist/<project>/latest.hex`.
-   - Allows instant flashing across multiple boards without recompiling.
 3. **Flashing Hardware**:
    - Flash cached project binaries to connected micro:bits via:
      ```bash
      ./run flash <project-name>
      ```
-   - Monitors unmount/remount cycles during the DAPLink flashing process.
+   - Safely streams binary chunks without extended attributes and monitors DAPLink reboot cycles.
 4. **Hex to TypeScript Rollback Extraction (`rollbacks/`)**:
-   - Convert MakeCode Universal Hex files back into original `.ts` source code:
+   - Convert MakeCode Universal Hex files back into original `.ts` source code inside Docker:
      ```bash
      ./run rollback <path-to-hex-file> [project-name]
      ```
@@ -113,4 +113,5 @@ You are an expert embedded systems and education pair-programmer specializing in
      ```bash
      ./run monitor [baud-rate]
      ```
+
 

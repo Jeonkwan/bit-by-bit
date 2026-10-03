@@ -20,11 +20,10 @@ describe('02-Countdown-Timer Project', () => {
         expect(bootFrequencies).toEqual([262, 330, 392, 523]);
     });
 
-    it('sets capacitive touch mode on pins P0, P1, P2 and LOGO using TouchTarget', () => {
+    it('sets capacitive touch mode on pins P0, P1, P2 using TouchTarget', () => {
         expect(microbit.pinModes.get(TouchTarget.P0)).toBe(1); // Capacitive = 1
         expect(microbit.pinModes.get(TouchTarget.P1)).toBe(1);
         expect(microbit.pinModes.get(TouchTarget.P2)).toBe(1);
-        expect(microbit.pinModes.get(TouchTarget.LOGO)).toBe(1);
     });
 
     it('plays animated sandglass loop while idle at 0m', () => {
@@ -56,7 +55,7 @@ describe('02-Countdown-Timer Project', () => {
         expect(microbit.tonesPlayed[microbit.tonesPlayed.length - 1].frequency).toBe(196); // Reset tone
     });
 
-    it('Button A plays and pauses timer, and controls orbiting edge dot', () => {
+    it('Button A plays and pauses timer, displaying pause sign and controlling countdown', () => {
         // Add 5 minutes (>= 60s, so edge dot is active)
         microbit.input.pressPin(TouchPin.P1);
 
@@ -74,10 +73,44 @@ describe('02-Countdown-Timer Project', () => {
         microbit.input.pressButton(Button.A);
         expect(microbit.tonesPlayed[0].frequency).toBe(330); // E4 pause tone
 
+        // Verify pause sign (two vertical bars at cols 1 and 3)
+        for (let y = 0; y < 5; y++) {
+            expect(microbit.led.point(0, y)).toBe(false);
+            expect(microbit.led.point(1, y)).toBe(true);
+            expect(microbit.led.point(2, y)).toBe(false);
+            expect(microbit.led.point(3, y)).toBe(true);
+            expect(microbit.led.point(4, y)).toBe(false);
+        }
+
         // Press Button A again to Resume
         microbit.tonesPlayed = [];
         microbit.input.pressButton(Button.A);
         expect(microbit.tonesPlayed[0].frequency).toBe(440); // A4 resume tone
+    });
+
+    it('locks out Pad 0, 1, 2 while timer is running or paused to prevent accidental changes', () => {
+        // Add 5 minutes and start
+        microbit.input.pressPin(TouchPin.P1);
+        microbit.input.pressButton(Button.A);
+
+        // Try pressing Pad 0 (+1m), Pad 1 (+5m), Pad 2 (+10m) while RUNNING
+        microbit.tonesPlayed = [];
+        microbit.input.pressPin(TouchPin.P0);
+        microbit.input.pressPin(TouchPin.P1);
+        microbit.input.pressPin(TouchPin.P2);
+        // None of the pad tones should have played!
+        expect(microbit.tonesPlayed).toEqual([]);
+
+        // Now pause the timer
+        microbit.input.pressButton(Button.A);
+        microbit.tonesPlayed = [];
+
+        // Try pressing pads while PAUSED
+        microbit.input.pressPin(TouchPin.P0);
+        microbit.input.pressPin(TouchPin.P1);
+        microbit.input.pressPin(TouchPin.P2);
+        // None of the pad tones should have played while paused either!
+        expect(microbit.tonesPlayed).toEqual([]);
     });
 
     it('alarm sequence runs when timer expires and can be silenced by Button A or B', () => {
@@ -94,53 +127,44 @@ describe('02-Countdown-Timer Project', () => {
         microbit.input.pressButton(Button.A);
     });
 
-    it('tapping gold touch logo displays Option 2 help instruction segments', () => {
+    it('touching gold logo while stopped or running does not disrupt timer', () => {
         microbit.stringHistory = [];
         microbit.tonesPlayed = [];
         microbit.input.touchLogo(TouchButtonEvent.Pressed);
 
-        expect(microbit.tonesPlayed.some(t => t.frequency === 523)).toBe(true); // Help chime
-        expect(microbit.stringHistory).toEqual([
-            'PADS: +1m +5m +10m | ',
-            'A:START/PAUSE | ',
-            'B:RESET'
-        ]);
+        // No help text or sound
+        expect(microbit.stringHistory).toEqual([]);
+        expect(microbit.tonesPlayed).toEqual([]);
     });
 
-    it('tapping any pad or button while help is scrolling immediately aborts remaining instruction', () => {
-        microbit.stringHistory = [];
-        const originalShowString = microbit.basic.showString;
-
-        // Simulate user touching Pad 1 during the first segment
-        microbit.basic.showString = vi.fn((text: string) => {
-            originalShowString(text);
-            microbit.input.pressPin(TouchPin.P1); // Tap +5m
+    it('holding golden logo via polling loop initiates brightness adjustment', () => {
+        const brightnessLevels: number[] = [];
+        const originalSetBrightness = microbit.led.setBrightness;
+        microbit.led.setBrightness = vi.fn((val: number) => {
+            originalSetBrightness(val);
+            brightnessLevels.push(val);
         });
 
-        microbit.input.touchLogo(TouchButtonEvent.Pressed);
-
-        // Only the first segment should have been displayed before aborting
-        expect(microbit.stringHistory).toEqual(['PADS: +1m +5m +10m | ']);
-        // Pad 1 tap (+5m) was processed
-        expect(microbit.tonesPlayed.some(t => t.frequency === 392)).toBe(true);
-
-        microbit.basic.showString = originalShowString;
-    });
-
-    it('tapping gold touch logo while help is scrolling cancels help immediately', () => {
-        microbit.stringHistory = [];
-        const originalShowString = microbit.basic.showString;
-
-        // Simulate tapping the logo again on the first segment
-        microbit.basic.showString = vi.fn((text: string) => {
-            originalShowString(text);
-            microbit.input.touchLogo(TouchButtonEvent.Pressed);
+        microbit.isLogoPressed = true;
+        let step = 0;
+        const originalPause = microbit.basic.pause;
+        microbit.basic.pause = vi.fn((_ms: number) => {
+            step++;
+            if (step >= 5) {
+                microbit.isLogoPressed = false;
+            }
         });
 
-        microbit.input.touchLogo(TouchButtonEvent.Pressed);
+        // Run forever handler 3 times to accumulate 3 hold ticks and trigger brightness loop
+        for (let i = 0; i < 3; i++) {
+            microbit.foreverHandlers[0]();
+        }
 
-        expect(microbit.stringHistory).toEqual(['PADS: +1m +5m +10m | ']);
-        microbit.basic.showString = originalShowString;
+        expect(brightnessLevels.length).toBeGreaterThan(0);
+        expect(brightnessLevels[0]).toBe(25);
+
+        microbit.led.setBrightness = originalSetBrightness;
+        microbit.basic.pause = originalPause;
     });
 
     it('touching gold logo while alarming silences sound and dismisses alarm', () => {
@@ -162,4 +186,42 @@ describe('02-Countdown-Timer Project', () => {
 
         expect(microbit.tonesPlayed.some(t => t.frequency === 196)).toBe(true); // Reset tone
     });
+
+    it('long pressing the golden logo cycles LED brightness to max, wraps to lowest, and locks in on release', () => {
+        const brightnessLevels: number[] = [];
+        const originalSetBrightness = microbit.led.setBrightness;
+        microbit.led.setBrightness = vi.fn((val: number) => {
+            originalSetBrightness(val);
+            brightnessLevels.push(val);
+        });
+
+        // Simulate holding finger for 12 cycles then releasing
+        let step = 0;
+        const originalPause = microbit.basic.pause;
+        microbit.basic.pause = vi.fn((_ms: number) => {
+            step++;
+            if (step >= 12) {
+                microbit.isLogoPressed = false;
+            }
+        });
+
+        microbit.tonesPlayed = [];
+        microbit.input.touchLogo(TouchButtonEvent.LongPressed);
+
+        // Verification:
+        // Started at 255, so first step wrapped to 25 (lowest), then increased towards 255 (max), then wrapped to 25 again!
+        expect(brightnessLevels.length).toBeGreaterThanOrEqual(12);
+        expect(brightnessLevels[0]).toBe(25);
+        expect(brightnessLevels[1]).toBe(55);
+        expect(brightnessLevels[8]).toBe(255); // reached max
+        expect(brightnessLevels[9]).toBe(25);  // wrapped to lowest
+        expect(brightnessLevels[10]).toBe(55);
+
+        // Confirmation chime 784Hz played on release
+        expect(microbit.tonesPlayed[microbit.tonesPlayed.length - 1].frequency).toBe(784);
+
+        microbit.led.setBrightness = originalSetBrightness;
+        microbit.basic.pause = originalPause;
+    });
 });
+

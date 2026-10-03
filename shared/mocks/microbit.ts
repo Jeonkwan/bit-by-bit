@@ -218,6 +218,8 @@ export class MockMicroBit {
     public iconHistory: IconNames[] = [];
     public numberHistory: number[] = [];
     public tonesPlayed: Array<{ frequency: number; duration: number }> = [];
+    public animationStopped: boolean = false;
+    public animationStopCount: number = 0;
 
     // Radio mock state
     public radioGroup: number = 0;
@@ -271,6 +273,8 @@ export class MockMicroBit {
         this.iconHistory = [];
         this.numberHistory = [];
         this.tonesPlayed = [];
+        this.animationStopped = false;
+        this.animationStopCount = 0;
         this.currentTemperature = 21;
         this.currentLightLevel = 128;
         this.currentCompassHeading = 0;
@@ -433,6 +437,15 @@ export class MockMicroBit {
         brightness: () => 255,
         setBrightness: (_val: number) => {},
         plotBarGraph: (_value: number, _high: number) => {},
+        stopAnimation: () => {
+            this.animationStopped = true;
+            this.animationStopCount++;
+            for (let y = 0; y < 5; y++) {
+                for (let x = 0; x < 5; x++) {
+                    this.screen[y][x] = 0;
+                }
+            }
+        },
     };
 
     public music = {

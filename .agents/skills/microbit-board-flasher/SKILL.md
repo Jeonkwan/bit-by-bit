@@ -29,7 +29,25 @@ This queries DAPLink, parses `DETAILS.TXT`, and displays:
 
 ---
 
-## 2. Flashing Code to the Board
+## 2. Compiling TypeScript to Universal HEX (`./run compile`)
+
+Compilation runs inside a dedicated Docker container using MakeCode CLI (`mkc`):
+```bash
+./run compile <project-name>
+```
+
+### What Compilation Does:
+1. Validates `projects/<project-name>/main.ts`.
+2. Sets up a clean MakeCode workspace with micro:bit V1 & V2 target definitions.
+3. Compiles the TypeScript program into a Universal Intel HEX binary (`binary.hex`).
+4. Embeds the original TypeScript source code and metadata as custom 0x0D records with LZMA compression (allowing full decompiler / rollback compatibility and MakeCode web editor importing).
+5. Automatically caches the binary in `dist/<project-name>/`:
+   - `dist/<project-name>/<project-name>_<YYYY-MM-DD_HHMM>.hex`
+   - `dist/<project-name>/latest.hex`
+
+---
+
+## 3. Flashing Code to the Board (`./run flash`)
 
 To flash a project to the connected micro:bit:
 ```bash
@@ -37,34 +55,12 @@ To flash a project to the connected micro:bit:
 ```
 
 ### How Flashing Works:
-1. Locates the compiled `.hex` file in `dist/<project-name>/latest.hex` (or scans for any `.hex` in the project or downloads directory).
-2. If no cached `.hex` exists, prompts the developer to download the `.hex` from the MakeCode web simulator or compile it.
-3. Automatically copies the `.hex` file to `/Volumes/MICROBIT`.
-4. Observes the DAPLink flashing process:
-   - The yellow LED on the back of the micro:bit flashes rapidly.
-   - The USB drive unmounts and remounts.
-5. Verifies successful completion.
-
----
-
-## 3. Timestamp Binary Caching (`dist/`)
-
-When flashing or archiving binaries for a project, caching allows flashing multiple micro:bit boards or testing different physical units without recompilation.
-
-To cache a `.hex` file:
-```bash
-./run cache <project-name> <path-to-hex-file>
-```
-Or simply:
-```bash
-./run cache <project-name>
-```
-*(Automatically picks up `microbit-<project-name>.hex` from `~/Downloads/` if omitted).*
-
-### Storage Convention:
-Binaries are stored in `dist/<project-name>/`:
-- `dist/<project-name>/<project-name>_<YYYY-MM-DD_HHMM>.hex`: Immutable timestamp version (e.g. `dist/01-blinking-heart/01-blinking-heart_2026-09-24_1350.hex`).
-- `dist/<project-name>/latest.hex`: Symlink or pointer to the latest cached binary for easy one-step flashing.
+1. Locates the compiled `.hex` file in `dist/<project-name>/latest.hex` (or compiles it via `./run compile <project-name>` if missing).
+2. Copies the `.hex` file directly to `/Volumes/MICROBIT` using attribute-free binary streaming (`cp -X` / low-level chunks).
+3. Safely handles DAPLink's auto-reboot:
+   - When the firmware completes transfer, DAPLink resets the board immediately.
+   - The flasher detects this hardware reset without hanging on macOS `fskit` locks.
+4. Verifies the board remounts or serial port is live.
 
 ---
 
@@ -72,9 +68,7 @@ Binaries are stored in `dist/<project-name>/`:
 
 Microsoft MakeCode Universal Hex files embed the complete original TypeScript source code, `pxt.json` configuration, and project metadata inside Intel HEX `0x0D` custom records compressed with LZMA.
 
-Any MakeCode `.hex` can be reverse-converted back into readable `.ts` code!
-
-To convert a `.hex` file back to TypeScript:
+To convert a `.hex` file back to TypeScript inside Docker:
 ```bash
 ./run rollback <path-to-hex-file> [project-name]
 ```
@@ -87,11 +81,6 @@ rollbacks/<project-name>_<YYYY-MM-DD_HHMM>/
 ├── pxt.json     # MakeCode configuration & dependencies
 └── metadata.json # Extracted target details and compression stats
 ```
-
-### When to Use Rollback:
-- When recovering an older version of code from an archived `.hex` file.
-- When inspecting what code is running inside a `.hex` file from a student, colleague, or backup.
-- When rolling back changes after an experiment or hardware test.
 
 ---
 
@@ -110,12 +99,12 @@ Press `Ctrl+C` to cleanly exit the monitor.
 
 ## 6. Best Practices & Troubleshooting
 
-1. **macOS Extended Attributes Issue**:
-   - The micro:bit DAPLink FAT16/12 filesystem does NOT support POSIX extended attributes (`getxattr`). Running `ls -la /Volumes/MICROBIT` can hang.
-   - Always access files directly by path (`open('/Volumes/MICROBIT/DETAILS.TXT')`) and use binary streams (`shutil.copyfile`) without preserving metadata attributes.
+1. **macOS `fskit` & DAPLink Disconnection**:
+   - On macOS Sonoma and Sequoia, Apple's `fskit` MS-DOS driver manages `/Volumes/MICROBIT`.
+   - Never use tools that preserve extended attributes or perform synchronous metadata flush (`shutil.copyfile`, Finder GUI copies).
+   - If a previous flash process hung, **unplug and reconnect the micro:bit USB cable** once to release the kernel VFS lock.
 2. **Re-flashing Multiple Boards**:
-   - Once a binary is cached with `./run cache <project>`, you can plug in any number of micro:bit boards sequentially and run `./run flash <project>` to flash them instantly.
+   - Once a binary is cached or compiled, you can plug in any number of micro:bit boards sequentially and run `./run flash <project>` to flash them instantly.
 3. **MakeCode Simulator Workflow**:
    - Edit or test code in `projects/<project-name>/main.ts`.
-   - Copy-paste into [makecode.microbit.org](https://makecode.microbit.org/) to simulate or click **Download** to obtain the compiled `.hex`.
-   - Cache it with `./run cache <project>` and flash with `./run flash <project>`.
+   - You can compile locally with `./run compile <project>` or paste into [makecode.microbit.org](https://makecode.microbit.org/) to simulate.

@@ -17,6 +17,7 @@ function print_help() {
   echo "  ./run new <project_name> Scaffold a new project under projects/<project_name>"
   echo "Hardware & Firmware Commands:"
   echo "  ./run board              Detect USB-connected micro:bit board and port"
+  echo "  ./run compile <proj>     Compile TypeScript to .hex inside Docker & cache in dist/<proj>/"
   echo "  ./run flash <proj>       Flash cached binary (dist/<proj>/latest.hex) to micro:bit"
   echo "  ./run cache <proj> [hex] Cache a .hex file with timestamp (YYYY-MM-DD_HHMM) in dist/"
   echo "  ./run rollback <hex>     Extract source code (.ts) from .hex into rollbacks/<proj>_<time>/"
@@ -51,6 +52,17 @@ case "$1" in
   lint)
     echo "🔍 Validating MakeCode Static TypeScript compatibility across all projects..."
     docker compose run --rm test vitest run shared/tests/makecode-compatibility.test.ts
+    ;;
+
+  compile|build)
+    shift
+    PROJ="$1"
+    if [ -z "$PROJ" ]; then
+      echo "❌ Error: Project name required. Example: ./run compile 02-countdown-timer"
+      exit 1
+    fi
+    echo "📦 Compiling '$PROJ' inside Docker..."
+    docker compose run --rm test python3 scripts/compile_project.py "$PROJ"
     ;;
 
   shell)
@@ -101,7 +113,8 @@ case "$1" in
       echo "❌ Error: Path to .hex file required. Example: ./run rollback dist/01-blinking-heart/latest.hex"
       exit 1
     fi
-    python3 scripts/hex_converter.py "$HEX_PATH" "$PROJ_NAME"
+    echo "🔄 Running hex rollback inside Docker..."
+    docker compose run --rm test python3 scripts/hex_converter.py "$HEX_PATH" "$PROJ_NAME"
     ;;
 
   monitor)

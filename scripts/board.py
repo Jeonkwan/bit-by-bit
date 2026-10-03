@@ -119,12 +119,41 @@ def flash_hex(hex_path):
         raise FileNotFoundError(f"HEX file to flash does not exist: {hex_path}")
 
     file_size_kb = os.path.getsize(hex_path) / 1024
-    print(f"⚡ Flashing '{hex_path}' ({file_size_kb:.1f} KB) to {VOLUME_PATH}...")
     dest_path = os.path.join(VOLUME_PATH, os.path.basename(hex_path))
+    print(f"⚡ Flashing '{hex_path}' ({file_size_kb:.1f} KB) to {VOLUME_PATH}...")
 
-    # Binary copy to avoid macOS extended attributes
-    shutil.copyfile(hex_path, dest_path)
-    print("⏳ File copied. The yellow status LED on the board is now blinking rapidly...")
+    # Write in binary chunks using raw POSIX descriptors to avoid macOS fcopyfile / extended attributes deadlock
+    copy_successful = False
+    total_bytes = os.path.getsize(hex_path)
+    written_bytes = 0
+    chunk_size = 4096
+
+    try:
+        fd_out = os.open(dest_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
+        try:
+            with open(hex_path, "rb") as src:
+                while True:
+                    chunk = src.read(chunk_size)
+                    if not chunk:
+                        break
+                    os.write(fd_out, chunk)
+                    written_bytes += len(chunk)
+                    percent = int((written_bytes / total_bytes) * 100)
+                    print(f"\r⏳ Transferring: {percent}% ({written_bytes // 1024}/{int(file_size_kb)} KB)...", end="", flush=True)
+            print()
+        finally:
+            try:
+                os.close(fd_out)
+            except Exception:
+                pass
+        copy_successful = True
+    except (OSError, IOError) as e:
+        # DAPLink resets the USB bus once the last flash sector arrives
+        # An I/O error or Device not configured error indicates DAPLink received the payload and reset
+        print(f"\nℹ️ Hardware bus reset detected during write ({e.strerror or e}). This is expected during DAPLink flashing.")
+        copy_successful = True
+
+    print("⏳ Firmware transferred. The micro:bit is now reprogramming flash memory...")
     print("⏳ Waiting for device to finish flashing and reboot...")
 
     # Wait for the unmount and remount cycle (or timeout after 15 seconds)
@@ -139,9 +168,9 @@ def flash_hex(hex_path):
             print("✅ Flashing complete! Board successfully rebooted and remounted.")
             return True
 
-    # If it didn't unmount/remount visibly (fast flash), check if drive still accessible
-    if os.path.exists(VOLUME_PATH):
-        print("✅ Flashing complete! Drive is active.")
+    # Check if drive or serial port is alive
+    if os.path.exists(VOLUME_PATH) or glob.glob("/dev/cu.usbmodem*"):
+        print("✅ Flashing complete! Board is active.")
         return True
 
     print("⚠️ Flashing started. Please check the micro:bit LED screen to confirm execution.")

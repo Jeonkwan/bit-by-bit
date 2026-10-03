@@ -154,6 +154,7 @@ declare namespace led {
     function brightness(): number;
     function setBrightness(value: number): void;
     function plotBarGraph(value: number, high: number): void;
+    function stopAnimation(): void;
 }
 
 declare namespace music {

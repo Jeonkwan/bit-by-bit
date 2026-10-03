@@ -11,21 +11,26 @@
  *   - While idle at 0m, displays a living animated sandglass (sand trickles down,
  *     then the sandglass rotates 180° and trickles again in a smooth loop).
  * - Gold Touch Logo (V2):
+ *   - Only active when timer is stopped/idle (ignored during active countdown).
  *   - Tapping the gold logo above the LED matrix scrolls concise instructions:
  *     "PADS: +1m +5m +10m | A:START/PAUSE | B:RESET"
  *   - Touching any other input (Pad 0, 1, 2, Button A, Button B) or tapping the
- *     logo again immediately stops the instruction with zero delay.
- * - Capacitive Touch Pad Duration Increments:
+ *     logo again immediately aborts the instruction via led.stopAnimation().
+ * - Capacitive Touch Pad Duration Increments (Stopped/Idle Only):
  *   - Pad 0: Adds +1 Minute per tap (C4 confirmation tone)
  *   - Pad 1: Adds +5 Minutes per tap (G4 confirmation tone)
  *   - Pad 2: Adds +10 Minutes per tap (C5 confirmation tone)
  *   - Taps accumulate flexibly up to 99 minutes.
+ *   - Lockout Protection: Once countdown starts (running or paused), pad touches
+ *     are locked to prevent accidentally ruining timer progress.
  * - Controls:
  *   - Button A: Play / Pause toggle. If 0m set, prompts user to tap pads.
+ *     When paused, displays a prominent pause symbol ('||'). Unpausing immediately
+ *     restores the remaining time and resumes the countdown.
  *   - Button B: Reset timer to 0m (returns to idle animated sandglass).
  * - Orbiting Edge Dot Activity Indicator:
  *   - >= 60s (Minutes mode): An edge dot orbits clockwise around the 16 perimeter
- *     LEDs every 200ms while running, and freezes in place when paused.
+ *     LEDs every 200ms while running.
  *   - < 60s (Seconds mode): Edge dot turns OFF completely, keeping the screen
  *     clean for fast-changing second digits (59..10, 9..0).
  * - Alarm on Expiry:
@@ -41,11 +46,13 @@ let remainingSeconds = 0;
 let isRunning = false;
 let isPaused = false;
 let isAlarming = false;
-let isShowingHelp = false;
+let isAdjustingBrightness = false;
+let currentBrightness = 255;
 let dotIndex = 0;
 let subSecondTicks = 0;
 let idleFrame = 0;
 let alarmCycle = 0;
+let logoHoldTicks = 0;
 
 // 16 Perimeter Coordinates (Clockwise around border)
 const PERIM_X: number[] = [0, 1, 2, 3, 4, 4, 4, 4, 4, 3, 2, 1, 0, 0, 0, 0];
@@ -132,7 +139,7 @@ function showRisingHourglass() {
 
 // --- Idle Sandglass Animation (Trickling sand + 180° rotation loop) ---
 function playHourglassStep() {
-    if (isRunning || remainingSeconds > 0 || isAlarming || isShowingHelp) return;
+    if (isRunning || remainingSeconds > 0 || isAlarming || isAdjustingBrightness) return;
 
     if (idleFrame === 0) {
         basic.showLeds(`
@@ -224,44 +231,50 @@ function playHourglassStep() {
     idleFrame = (idleFrame + 1) % 10;
 }
 
-// --- Help Instruction System ---
-function stopHelp() {
-    if (isShowingHelp) {
-        isShowingHelp = false;
-        basic.clearScreen();
+// --- Brightness Adjustment System (Long-Press Gold Logo) ---
+function stepBrightness() {
+    if (currentBrightness >= 255) {
+        currentBrightness = 25; // Reset to lowest visible level and cycle up to max again
+    } else {
+        currentBrightness += 30;
+        if (currentBrightness > 255) {
+            currentBrightness = 255;
+        }
     }
+    led.setBrightness(currentBrightness);
 }
 
-function showHelp() {
+function adjustBrightnessLoop() {
+    if (isAdjustingBrightness) return;
     if (isAlarming) {
         dismissAlarm();
         return;
     }
 
-    if (isShowingHelp) {
-        // Tapping logo while help is scrolling cancels it
-        stopHelp();
-        renderDisplay();
-        return;
+    isAdjustingBrightness = true;
+
+    // Prominently show a Diamond on the 5x5 LED matrix so the user visibly sees brightness changes
+    basic.showIcon(IconNames.Diamond);
+
+    let releasedCount = 0;
+    let holdCount = 0;
+
+    // Cycle brightness while user keeps their finger on the golden logo
+    while (releasedCount < 3 && holdCount < 80) {
+        stepBrightness();
+
+        basic.pause(150);
+        if (input.logoIsPressed()) {
+            releasedCount = 0;
+        } else {
+            releasedCount++;
+        }
+        holdCount++;
     }
 
-    isShowingHelp = true;
-    music.playTone(523, 100); // C5 chime for help
-
-    const segments = [
-        "PADS: +1m +5m +10m | ",
-        "A:START/PAUSE | ",
-        "B:RESET"
-    ];
-
-    for (let s = 0; s < segments.length; s++) {
-        if (!isShowingHelp) break;
-        basic.showString(segments[s], 100);
-        if (!isShowingHelp) break;
-        basic.pause(80);
-    }
-
-    isShowingHelp = false;
+    isAdjustingBrightness = false;
+    // Pleasant confirmation chime indicating brightness level locked
+    music.playTone(784, 120);
     renderDisplay();
 }
 
@@ -332,8 +345,23 @@ function drawBaseDigits() {
     }
 }
 
+function showPauseSign() {
+    basic.showLeds(`
+        . # . # .
+        . # . # .
+        . # . # .
+        . # . # .
+        . # . # .
+    `);
+}
+
 function renderDisplay() {
-    if (isAlarming || isShowingHelp) {
+    if (isAlarming || isAdjustingBrightness) {
+        return;
+    }
+
+    if (isRunning && isPaused) {
+        showPauseSign();
         return;
     }
 
@@ -394,10 +422,13 @@ function dismissAlarm() {
 
 // --- Timer Control Functions ---
 function addMinutes(mins: number) {
-    stopHelp();
-
     if (isAlarming) {
         dismissAlarm();
+        return;
+    }
+
+    // Ignore duration changes if countdown has started (actively running or paused)
+    if (isRunning) {
         return;
     }
 
@@ -422,8 +453,6 @@ function addMinutes(mins: number) {
 }
 
 function resetTimer() {
-    stopHelp();
-
     if (isAlarming) {
         dismissAlarm();
         return;
@@ -441,8 +470,6 @@ function resetTimer() {
 }
 
 function togglePlayPause() {
-    stopHelp();
-
     if (isAlarming) {
         dismissAlarm();
         return;
@@ -480,7 +507,6 @@ function togglePlayPause() {
 pins.touchSetMode(TouchTarget.P0, TouchTargetMode.Capacitive);
 pins.touchSetMode(TouchTarget.P1, TouchTargetMode.Capacitive);
 pins.touchSetMode(TouchTarget.P2, TouchTargetMode.Capacitive);
-pins.touchSetMode(TouchTarget.LOGO, TouchTargetMode.Capacitive);
 
 // Pad 0: Adds +1 minute
 input.onPinPressed(TouchPin.P0, function () {
@@ -497,27 +523,49 @@ input.onPinPressed(TouchPin.P2, function () {
     addMinutes(10);
 });
 
-// Gold Touch Logo: Display instructions ("PADS: +1m +5m +10m | A:START/PAUSE | B:RESET")
+// Gold Touch Logo: Quick tap dismisses alarm if sounding
 input.onLogoEvent(TouchButtonEvent.Pressed, function () {
-    showHelp();
+    if (isAlarming) {
+        dismissAlarm();
+    }
+});
+
+// Gold Touch Logo: Long press event to cycle LED brightness (increase to max, then cycle from lowest to max)
+input.onLogoEvent(TouchButtonEvent.LongPressed, function () {
+    adjustBrightnessLoop();
 });
 
 // --- Button Event Handlers ---
-// Button A: Play / Pause toggle (or dismiss alarm / cancel help)
+// Button A: Play / Pause toggle (or dismiss alarm)
 input.onButtonPressed(Button.A, function () {
     togglePlayPause();
 });
 
-// Button B: Reset timer to 0 (or dismiss alarm / cancel help)
+// Button B: Reset timer to 0 (or dismiss alarm)
 input.onButtonPressed(Button.B, function () {
     resetTimer();
 });
 
 // --- Main Loop ---
 basic.forever(function () {
-    if (isShowingHelp) {
+    if (isAdjustingBrightness) {
         basic.pause(100);
-    } else if (isAlarming) {
+        return;
+    }
+
+    // Monitor sustained touch on the golden logo to adjust brightness
+    if (input.logoIsPressed()) {
+        logoHoldTicks++;
+        if (logoHoldTicks >= 3) { // ~450ms sustained hold
+            logoHoldTicks = 0;
+            adjustBrightnessLoop();
+            return;
+        }
+    } else {
+        logoHoldTicks = 0;
+    }
+
+    if (isAlarming) {
         runAlarmCycle();
     } else if (isRunning && !isPaused && remainingSeconds > 0) {
         basic.pause(200);
@@ -543,5 +591,6 @@ basic.forever(function () {
 });
 
 // --- Boot Initialization Sequence ---
+led.setBrightness(currentBrightness);
 playGreetingChime();
 showRisingHourglass();

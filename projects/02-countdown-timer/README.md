@@ -15,17 +15,24 @@ A full-featured BBC micro:bit countdown timer built using Microsoft MakeCode (St
    - **Pad 1**: Adds **+5 minutes** per tap (`392Hz` G4 confirmation tone).
    - **Pad 2**: Adds **+10 minutes** per tap (`523Hz` C5 confirmation tone).
    - Taps accumulate flexibly up to 99 minutes (e.g. Pad 1 (+5m) + Pad 0 (+1m) + Pad 0 (+1m) = 7 minutes).
+   - **Lockout Protection**: Once the countdown has started (actively running or paused), pad touches are locked and ignored so accidental finger contact will never ruin your timer progress.
    - Configured with `pins.touchSetMode(TouchTarget.*, TouchTargetMode.Capacitive)` for bare-finger tapping on micro:bit V2 without holding GND.
-3. **Gold Touch Logo Instructions (V2 - Option 2)**:
-   - Tapping the gold micro:bit logo above the LED display scrolls concise help instructions:
-     `"PADS: +1m +5m +10m | A:START/PAUSE | B:RESET"`
-   - **Instant Interruptibility**: Touching any pad (**Pad 0, 1, 2**), pressing **Button A**, pressing **Button B**, or tapping the gold logo again **immediately aborts** the help scroll with zero delay and executes your input.
-   - If the alarm is sounding, touching the gold logo immediately silences and dismisses it.
+3. **Gold Touch Logo Controls (V2)**:
+   - **Tap (Short Press - Help / Silence)**:
+     - **Active Only When Stopped/Idle**: Tapping the gold micro:bit logo while the countdown is actively running or paused is ignored, ensuring your active timer is never disturbed.
+     - When idle or setting time, tapping the gold logo scrolls concise help instructions:
+       `"PADS: +1m +5m +10m | A:START/PAUSE | B:RESET"`
+     - **Instant Interruptibility (`led.stopAnimation`)**: Touching any pad (**Pad 0, 1, 2**), pressing **Button A**, pressing **Button B**, or tapping the gold logo again **immediately aborts** the help scroll with zero delay and executes your input on the spot.
+     - If the alarm is sounding, touching the gold logo immediately silences and dismisses it.
+   - **Long Press (LED Brightness Cycling & Lock)**:
+     - Keep your finger held on the golden logo to cycle the 5x5 LED matrix brightness up to maximum (`255`), wrap back to lowest visible level (`25`), and cycle up again.
+     - Continuous real-time audio pitch feedback rises and falls with the brightness level (`220Hz` to `660Hz`).
+     - Releasing your finger locks the brightness at that exact level and plays a pleasant confirmation chime (`784Hz`).
 4. **Controls**:
    - **Button A (Play / Pause)**:
      - If stopped: starts the timer (if 0m is set, prompts user to tap pads).
-     - If running: pauses the timer (freezes countdown and edge dot).
-     - If paused: resumes the countdown and dot motion.
+     - If running: pauses the timer and **displays a prominent pause symbol (`||`)**.
+     - If paused: unpauses and immediately restores the remaining digits and continues counting down.
    - **Button B (Reset to 0)**:
      - Resets total and remaining time to 0 minutes (`196Hz` reset tone) and returns to the idle animated sandglass.
 5. **Orbiting Edge Dot Activity Indicator**:

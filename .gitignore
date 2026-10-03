@@ -13,3 +13,13 @@ Thumbs.db
 # IDEs
 .vscode/
 .idea/
+
+# Build artifacts & Python cache
+.build/
+dist/*
+!dist/.gitkeep
+rollbacks/*
+!rollbacks/.gitkeep
+__pycache__/
+*.pyc
+

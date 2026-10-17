@@ -10,12 +10,6 @@
  *   - Starts at 0 minutes (no preset default).
  *   - While idle at 0m, displays a living animated sandglass (sand trickles down,
  *     then the sandglass rotates 180° and trickles again in a smooth loop).
- * - Gold Touch Logo (V2):
- *   - Only active when timer is stopped/idle (ignored during active countdown).
- *   - Tapping the gold logo above the LED matrix scrolls concise instructions:
- *     "PADS: +1m +5m +10m | A:START/PAUSE | B:RESET"
- *   - Touching any other input (Pad 0, 1, 2, Button A, Button B) or tapping the
- *     logo again immediately aborts the instruction via led.stopAnimation().
  * - Capacitive Touch Pad Duration Increments (Stopped/Idle Only):
  *   - Pad 0: Adds +1 Minute per tap (C4 confirmation tone)
  *   - Pad 1: Adds +5 Minutes per tap (G4 confirmation tone)
@@ -28,6 +22,9 @@
  *     When paused, displays a prominent pause symbol ('||'). Unpausing immediately
  *     restores the remaining time and resumes the countdown.
  *   - Button B: Reset timer to 0m (returns to idle animated sandglass).
+ * - Minute-Passed 3-Beep Chime:
+ *   - Every minute that passes during an active countdown, plays a random 3-beep
+ *     melody preset (e.g. do-re-mi, mi-re-do, di-do-di, do-mi-so, etc.).
  * - Orbiting Edge Dot Activity Indicator:
  *   - >= 60s (Minutes mode): An edge dot orbits clockwise around the 16 perimeter
  *     LEDs every 200ms while running.
@@ -36,8 +33,15 @@
  * - Alarm on Expiry:
  *   - Long-duration repeating alert sound (880Hz/1046Hz) and flashing animated
  *     target/diamond shapes when countdown hits 0.
- *   - Dismissal: Pressing Button A or Button B immediately silences the sound
- *     and resets to the idle animated sandglass.
+ *   - Dismissal: Pressing Button A, Button B, or touching the Gold Logo immediately
+ *     silences the sound and resets to the idle animated sandglass.
+ * - Idle Sleep & Face/ZZZ Animation:
+ *   - When left idle at 0m for ~5 seconds (3 complete sandglass rotations),
+ *     the micro:bit falls asleep, displaying a resting face and drifting ZZZ animation.
+ * - Wake-Up via Gold Touch Logo or Microphone Loud Sound (micro:bit V2):
+ *   - Touching the golden logo or detecting a loud sound (clap, voice, snap)
+ *     wakes the timer with startled open eyes, shakes its head/face left-to-right,
+ *     smiles warmly with a cheerful melody, and smoothly returns to the sandglass.
  */
 
 // --- State Variables ---
@@ -46,13 +50,15 @@ let remainingSeconds = 0;
 let isRunning = false;
 let isPaused = false;
 let isAlarming = false;
-let isAdjustingBrightness = false;
-let currentBrightness = 255;
 let dotIndex = 0;
 let subSecondTicks = 0;
 let idleFrame = 0;
+let idleCycles = 0;
+let isSleeping = false;
+let sleepFrame = 0;
+let isWakingUp = false;
+const IDLE_CYCLES_TO_SLEEP = 3; // ~5.4s of idle sandglass (3 cycles * 1.8s) before falling asleep
 let alarmCycle = 0;
-let logoHoldTicks = 0;
 
 // 16 Perimeter Coordinates (Clockwise around border)
 const PERIM_X: number[] = [0, 1, 2, 3, 4, 4, 4, 4, 4, 3, 2, 1, 0, 0, 0, 0];
@@ -139,7 +145,7 @@ function showRisingHourglass() {
 
 // --- Idle Sandglass Animation (Trickling sand + 180° rotation loop) ---
 function playHourglassStep() {
-    if (isRunning || remainingSeconds > 0 || isAlarming || isAdjustingBrightness) return;
+    if (isRunning || remainingSeconds > 0 || isAlarming || isWakingUp || isSleeping) return;
 
     if (idleFrame === 0) {
         basic.showLeds(`
@@ -228,54 +234,192 @@ function playHourglassStep() {
     }
 
     basic.pause(180);
+    if (idleFrame === 9) {
+        idleCycles++;
+        if (idleCycles >= IDLE_CYCLES_TO_SLEEP) {
+            isSleeping = true;
+            sleepFrame = 0;
+        }
+    }
     idleFrame = (idleFrame + 1) % 10;
 }
 
-// --- Brightness Adjustment System (Long-Press Gold Logo) ---
-function stepBrightness() {
-    if (currentBrightness >= 255) {
-        currentBrightness = 25; // Reset to lowest visible level and cycle up to max again
-    } else {
-        currentBrightness += 30;
-        if (currentBrightness > 255) {
-            currentBrightness = 255;
-        }
+// --- Idle Sleeping & ZZZ Animation ---
+function playSleepStep() {
+    if (isRunning || remainingSeconds > 0 || isAlarming || isWakingUp) return;
+
+    if (sleepFrame === 0) {
+        // Calm sleeping face (closed eyes, peaceful mouth)
+        basic.showLeds(`
+            . . . . .
+            # # . # #
+            . . . . .
+            . # # # .
+            . . . . .
+        `);
+        basic.pause(400);
+    } else if (sleepFrame === 1) {
+        // Sleeping face gently breathing / relaxed exhale
+        basic.showLeds(`
+            . . . . .
+            # # . # #
+            . . . . .
+            . . # . .
+            . . . . .
+        `);
+        basic.pause(350);
+    } else if (sleepFrame === 2) {
+        // Small 'z' drifting up from lower-right
+        basic.showLeds(`
+            . . . . .
+            . . . . .
+            . . . . .
+            . . . # #
+            . . . # #
+        `);
+        basic.pause(250);
+    } else if (sleepFrame === 3) {
+        // Medium 'z' floating upwards towards center
+        basic.showLeds(`
+            . . . . .
+            . . # # .
+            . . . # .
+            . . # . .
+            . . # # .
+        `);
+        basic.pause(250);
+    } else if (sleepFrame === 4) {
+        // Large 'Z' drifting higher towards top-right
+        basic.showLeds(`
+            . # # # .
+            . . . # .
+            . . # . .
+            . # . . .
+            . # # # .
+        `);
+        basic.pause(250);
+    } else if (sleepFrame === 5) {
+        // Big 'Z' floating away to top border
+        basic.showLeds(`
+            # # # # .
+            . . . # .
+            . . # . .
+            . # . . .
+            # # # # .
+        `);
+        basic.pause(250);
     }
-    led.setBrightness(currentBrightness);
+
+    sleepFrame = (sleepFrame + 1) % 6;
 }
 
-function adjustBrightnessLoop() {
-    if (isAdjustingBrightness) return;
-    if (isAlarming) {
-        dismissAlarm();
-        return;
+// --- Character Wake-Up Sequence (Microphone V2 or Gold Touch Logo) ---
+function wakeUpCharacter() {
+    if (isRunning || remainingSeconds > 0 || isAlarming || isWakingUp) return;
+    if (!isSleeping) return;
+
+    isSleeping = false;
+    isWakingUp = true;
+    idleCycles = 0;
+    idleFrame = 0;
+    sleepFrame = 0;
+
+    // 1. Surprise! Startled eyes open wide with curious chirp
+    basic.showLeds(`
+        . # . # .
+        . # . # .
+        . . . . .
+        . . # . .
+        . . . . .
+    `);
+    music.playTone(587, 80); // D5 startled chirp
+    basic.pause(150);
+
+    // 2. Head Shake: face turns Left -> Right -> Left -> Right -> Center
+    // Face Shift Left
+    basic.showLeds(`
+        # . # . .
+        # . # . .
+        . . . . .
+        # # # . .
+        . . . . .
+    `);
+    basic.pause(100);
+
+    // Face Shift Right
+    basic.showLeds(`
+        . . # . #
+        . . # . #
+        . . . . .
+        . . # # #
+        . . . . .
+    `);
+    basic.pause(100);
+
+    // Face Shift Left again
+    basic.showLeds(`
+        # . # . .
+        # . # . .
+        . . . . .
+        # # # . .
+        . . . . .
+    `);
+    basic.pause(100);
+
+    // Face Shift Right again
+    basic.showLeds(`
+        . . # . #
+        . . # . #
+        . . . . .
+        . . # # #
+        . . . . .
+    `);
+    basic.pause(100);
+
+    // Center Face
+    basic.showLeds(`
+        . # . # .
+        . # . # .
+        . . . . .
+        . # # # .
+        . . . . .
+    `);
+    basic.pause(100);
+
+    // 3. Smile Again: cheerful smiling face with rising wake-up arpeggio
+    basic.showLeds(`
+        . . . . .
+        . # . # .
+        . . . . .
+        # . . . #
+        . # # # .
+    `);
+    music.playTone(523, 80);  // C5
+    music.playTone(659, 100); // E5
+    music.playTone(784, 150); // G5
+    basic.pause(400);
+
+    // 4. Return to Living Sandglass
+    isWakingUp = false;
+}
+
+// --- Minute-Passed Chime Presets (3-beep melodies) ---
+const MINUTE_TONE_PRESETS: number[][] = [
+    [523, 587, 659], // do-re-mi (C5, D5, E5)
+    [659, 587, 523], // mi-re-do (E5, D5, C5)
+    [784, 659, 784], // di-do-di (G5, E5, G5)
+    [523, 659, 523], // do-di-do (C5, E5, C5)
+    [523, 659, 784], // do-mi-so (C5, E5, G5)
+    [784, 659, 523], // so-mi-do (G5, E5, C5)
+];
+
+function playRandomMinuteChime() {
+    const choice = randint(0, MINUTE_TONE_PRESETS.length - 1);
+    const melody = MINUTE_TONE_PRESETS[choice];
+    for (let i = 0; i < 3; i++) {
+        music.playTone(melody[i], 80);
+        basic.pause(30);
     }
-
-    isAdjustingBrightness = true;
-
-    // Prominently show a Diamond on the 5x5 LED matrix so the user visibly sees brightness changes
-    basic.showIcon(IconNames.Diamond);
-
-    let releasedCount = 0;
-    let holdCount = 0;
-
-    // Cycle brightness while user keeps their finger on the golden logo
-    while (releasedCount < 3 && holdCount < 80) {
-        stepBrightness();
-
-        basic.pause(150);
-        if (input.logoIsPressed()) {
-            releasedCount = 0;
-        } else {
-            releasedCount++;
-        }
-        holdCount++;
-    }
-
-    isAdjustingBrightness = false;
-    // Pleasant confirmation chime indicating brightness level locked
-    music.playTone(784, 120);
-    renderDisplay();
 }
 
 // --- Display Rendering Functions ---
@@ -356,7 +500,7 @@ function showPauseSign() {
 }
 
 function renderDisplay() {
-    if (isAlarming || isAdjustingBrightness) {
+    if (isAlarming) {
         return;
     }
 
@@ -427,6 +571,11 @@ function addMinutes(mins: number) {
         return;
     }
 
+    // Wake up if sleeping
+    isSleeping = false;
+    isWakingUp = false;
+    idleCycles = 0;
+
     // Ignore duration changes if countdown has started (actively running or paused)
     if (isRunning) {
         return;
@@ -458,6 +607,9 @@ function resetTimer() {
         return;
     }
 
+    isSleeping = false;
+    isWakingUp = false;
+    idleCycles = 0;
     isRunning = false;
     isPaused = false;
     totalSeconds = 0;
@@ -473,6 +625,13 @@ function togglePlayPause() {
     if (isAlarming) {
         dismissAlarm();
         return;
+    }
+
+    // Wake up if sleeping
+    if (isSleeping) {
+        isSleeping = false;
+        idleCycles = 0;
+        idleFrame = 0;
     }
 
     // If stopped/idle
@@ -523,16 +682,26 @@ input.onPinPressed(TouchPin.P2, function () {
     addMinutes(10);
 });
 
-// Gold Touch Logo: Quick tap dismisses alarm if sounding
+// Gold Touch Logo: Wakes up timer if sleeping (shakes head & smiles), or dismisses alarm
 input.onLogoEvent(TouchButtonEvent.Pressed, function () {
     if (isAlarming) {
         dismissAlarm();
+        return;
+    }
+    if (isSleeping) {
+        wakeUpCharacter();
+    } else {
+        idleCycles = 0;
     }
 });
 
-// Gold Touch Logo: Long press event to cycle LED brightness (increase to max, then cycle from lowest to max)
-input.onLogoEvent(TouchButtonEvent.LongPressed, function () {
-    adjustBrightnessLoop();
+// --- Microphone Event Handler (micro:bit V2) ---
+// Set loud sound threshold to 70% (~179 / 255) for higher wake-up sound threshold
+input.setSoundThreshold(SoundThreshold.Loud, 179);
+
+// Loud Sound: Wakes up timer if sleeping, shakes head and smiles
+input.onSound(DetectedSound.Loud, function () {
+    wakeUpCharacter();
 });
 
 // --- Button Event Handlers ---
@@ -548,23 +717,6 @@ input.onButtonPressed(Button.B, function () {
 
 // --- Main Loop ---
 basic.forever(function () {
-    if (isAdjustingBrightness) {
-        basic.pause(100);
-        return;
-    }
-
-    // Monitor sustained touch on the golden logo to adjust brightness
-    if (input.logoIsPressed()) {
-        logoHoldTicks++;
-        if (logoHoldTicks >= 3) { // ~450ms sustained hold
-            logoHoldTicks = 0;
-            adjustBrightnessLoop();
-            return;
-        }
-    } else {
-        logoHoldTicks = 0;
-    }
-
     if (isAlarming) {
         runAlarmCycle();
     } else if (isRunning && !isPaused && remainingSeconds > 0) {
@@ -579,18 +731,25 @@ basic.forever(function () {
             if (remainingSeconds === 0) {
                 triggerAlarm();
                 return;
+            } else if (remainingSeconds % 60 === 0) {
+                playRandomMinuteChime();
             }
         }
         renderDisplay();
     } else if (!isRunning && remainingSeconds === 0 && !isAlarming) {
-        // Idle waiting for input: play animated sandglass loop
-        playHourglassStep();
+        if (isWakingUp) {
+            basic.pause(100);
+        } else if (isSleeping) {
+            playSleepStep();
+        } else {
+            // Idle waiting for input: play animated sandglass loop
+            playHourglassStep();
+        }
     } else {
         basic.pause(100);
     }
 });
 
 // --- Boot Initialization Sequence ---
-led.setBrightness(currentBrightness);
 playGreetingChime();
 showRisingHourglass();

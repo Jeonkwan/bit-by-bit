@@ -45,6 +45,16 @@ declare enum IconNames {
     Scissors = 39,
 }
 
+declare enum DetectedSound {
+    Loud = 2,
+    Quiet = 1,
+}
+
+declare enum SoundThreshold {
+    Loud = 2,
+    Quiet = 1,
+}
+
 declare enum Button {
     A = 1,
     B = 2,
@@ -144,6 +154,9 @@ declare namespace input {
     function lightLevel(): number;
     function compassHeading(): number;
     function acceleration(dimension: 'x' | 'y' | 'z' | 'strength'): number;
+    function onSound(sound: DetectedSound, handler: () => void): void;
+    function soundLevel(): number;
+    function setSoundThreshold(sound: SoundThreshold, threshold: number): void;
 }
 
 declare namespace led {

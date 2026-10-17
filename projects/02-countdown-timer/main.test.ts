@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { microbit, Button, TouchPin, TouchTarget, TouchButtonEvent, IconNames } from '@shared/mocks/microbit';
+import { microbit, Button, TouchPin, TouchTarget, TouchButtonEvent, IconNames, DetectedSound, SoundThreshold } from '@shared/mocks/microbit';
 import { validateMakeCodeFile } from '@shared/testing/makecode-validator';
 
 describe('02-Countdown-Timer Project', () => {
@@ -137,34 +137,46 @@ describe('02-Countdown-Timer Project', () => {
         expect(microbit.tonesPlayed).toEqual([]);
     });
 
-    it('holding golden logo via polling loop initiates brightness adjustment', () => {
-        const brightnessLevels: number[] = [];
-        const originalSetBrightness = microbit.led.setBrightness;
-        microbit.led.setBrightness = vi.fn((val: number) => {
-            originalSetBrightness(val);
-            brightnessLevels.push(val);
-        });
-
-        microbit.isLogoPressed = true;
-        let step = 0;
-        const originalPause = microbit.basic.pause;
-        microbit.basic.pause = vi.fn((_ms: number) => {
-            step++;
-            if (step >= 5) {
-                microbit.isLogoPressed = false;
-            }
-        });
-
-        // Run forever handler 3 times to accumulate 3 hold ticks and trigger brightness loop
-        for (let i = 0; i < 3; i++) {
+    it('touching the golden logo while sleeping wakes up the timer with head shake, smile, and returns to sandglass', () => {
+        // Enter sleep mode (~5s = 3 cycles * 10 frames = 30 ticks)
+        for (let i = 0; i < 30; i++) {
             microbit.foreverHandlers[0]();
         }
 
-        expect(brightnessLevels.length).toBeGreaterThan(0);
-        expect(brightnessLevels[0]).toBe(25);
+        microbit.tonesPlayed = [];
 
-        microbit.led.setBrightness = originalSetBrightness;
-        microbit.basic.pause = originalPause;
+        // Tap the golden logo
+        microbit.input.touchLogo(TouchButtonEvent.Pressed);
+
+        // Verify wake-up tones: startled chirp 587Hz followed by cheerful smile melody (523, 659, 784)
+        const wakeTones = microbit.tonesPlayed.map(t => t.frequency);
+        expect(wakeTones).toEqual([587, 523, 659, 784]);
+
+        // After waking up, transitions back to sandglass animation
+        microbit.foreverHandlers[0]();
+        expect(microbit.led.point(0, 0)).toBe(true);
+        expect(microbit.led.point(4, 0)).toBe(true);
+    });
+
+    it('plays a random 3-beep preset chime each minute that passes during countdown', () => {
+        // Set 2 minutes (120s) and start
+        microbit.input.pressPin(TouchPin.P0);
+        microbit.input.pressPin(TouchPin.P0);
+        microbit.input.pressButton(Button.A);
+
+        microbit.tonesPlayed = [];
+
+        // Advance 300 ticks = 60 seconds (so remainingSeconds drops to exactly 60s)
+        for (let i = 0; i < 300; i++) {
+            microbit.foreverHandlers[0]();
+        }
+
+        // 3 beeps played for the minute boundary!
+        expect(microbit.tonesPlayed.length).toBe(3);
+        for (const tone of microbit.tonesPlayed) {
+            expect(tone.duration).toBe(80);
+            expect([523, 587, 659, 784]).toContain(tone.frequency);
+        }
     });
 
     it('touching gold logo while alarming silences sound and dismisses alarm', () => {
@@ -187,41 +199,90 @@ describe('02-Countdown-Timer Project', () => {
         expect(microbit.tonesPlayed.some(t => t.frequency === 196)).toBe(true); // Reset tone
     });
 
-    it('long pressing the golden logo cycles LED brightness to max, wraps to lowest, and locks in on release', () => {
-        const brightnessLevels: number[] = [];
-        const originalSetBrightness = microbit.led.setBrightness;
-        microbit.led.setBrightness = vi.fn((val: number) => {
-            originalSetBrightness(val);
-            brightnessLevels.push(val);
-        });
+    it('enters sleep mode showing a sleeping face and zzz animation after idle period', () => {
+        // Run 3 full sandglass cycles (3 * 10 frames = 30 ticks ~ 5.4s)
+        for (let i = 0; i < 30; i++) {
+            microbit.foreverHandlers[0]();
+        }
 
-        // Simulate holding finger for 12 cycles then releasing
-        let step = 0;
-        const originalPause = microbit.basic.pause;
-        microbit.basic.pause = vi.fn((_ms: number) => {
-            step++;
-            if (step >= 12) {
-                microbit.isLogoPressed = false;
-            }
-        });
+        // 31st tick: executes playSleepStep() frame 0 (sleeping face)
+        microbit.foreverHandlers[0]();
+
+        // Verify sleeping face (closed eyes on row 1: ##.##)
+        expect(microbit.led.point(0, 1)).toBe(true);
+        expect(microbit.led.point(1, 1)).toBe(true);
+        expect(microbit.led.point(2, 1)).toBe(false);
+        expect(microbit.led.point(3, 1)).toBe(true);
+        expect(microbit.led.point(4, 1)).toBe(true);
+
+        // Run next 5 sleep steps (breathing face, small z, medium z, large Z, fading Z)
+        for (let i = 0; i < 5; i++) {
+            microbit.foreverHandlers[0]();
+        }
+    });
+
+    it('wakes up on microphone loud sound, shakes head, smiles, and returns to sandglass', () => {
+        // Enter sleep mode (~5s = 30 ticks)
+        for (let i = 0; i < 30; i++) {
+            microbit.foreverHandlers[0]();
+        }
 
         microbit.tonesPlayed = [];
-        microbit.input.touchLogo(TouchButtonEvent.LongPressed);
 
-        // Verification:
-        // Started at 255, so first step wrapped to 25 (lowest), then increased towards 255 (max), then wrapped to 25 again!
-        expect(brightnessLevels.length).toBeGreaterThanOrEqual(12);
-        expect(brightnessLevels[0]).toBe(25);
-        expect(brightnessLevels[1]).toBe(55);
-        expect(brightnessLevels[8]).toBe(255); // reached max
-        expect(brightnessLevels[9]).toBe(25);  // wrapped to lowest
-        expect(brightnessLevels[10]).toBe(55);
+        // Trigger loud sound event from microphone
+        microbit.input.triggerSound(DetectedSound.Loud);
 
-        // Confirmation chime 784Hz played on release
-        expect(microbit.tonesPlayed[microbit.tonesPlayed.length - 1].frequency).toBe(784);
+        // Verify tones: startled chirp 587Hz (D5) followed by cheerful smile arpeggio 523, 659, 784 (C5, E5, G5)
+        const wakeTones = microbit.tonesPlayed.map(t => t.frequency);
+        expect(wakeTones).toEqual([587, 523, 659, 784]);
 
-        microbit.led.setBrightness = originalSetBrightness;
-        microbit.basic.pause = originalPause;
+        // After waking up, the next idle step returns to sandglass
+        microbit.foreverHandlers[0]();
+        // Frame 0 of sandglass has top row full (# # # # #)
+        expect(microbit.led.point(0, 0)).toBe(true);
+        expect(microbit.led.point(1, 0)).toBe(true);
+        expect(microbit.led.point(2, 0)).toBe(true);
+        expect(microbit.led.point(3, 0)).toBe(true);
+        expect(microbit.led.point(4, 0)).toBe(true);
+    });
+
+    it('tapping capacitive pads or buttons immediately wakes from sleep', () => {
+        // Enter sleep mode (~5s = 30 ticks)
+        for (let i = 0; i < 30; i++) {
+            microbit.foreverHandlers[0]();
+        }
+
+        microbit.tonesPlayed = [];
+
+        // Tap Pad 0 (+1m)
+        microbit.input.pressPin(TouchPin.P0);
+
+        // Verify +1m tone (262Hz) played and display no longer in sleep mode
+        expect(microbit.tonesPlayed.some(t => t.frequency === 262)).toBe(true);
+
+        // Timer is now set to 1m (not sleeping)
+        // Center column of '1' digit should be plotted
+        expect(microbit.led.point(2, 2)).toBe(true);
+    });
+
+    it('configures microphone sound threshold to 70% (179)', () => {
+        expect(microbit.soundThresholds.get(SoundThreshold.Loud)).toBe(179);
+    });
+
+    it('ignores loud sound if timer is actively running countdown', () => {
+        // Set 5 minutes and start countdown
+        microbit.input.pressPin(TouchPin.P1);
+        microbit.input.pressButton(Button.A);
+
+        microbit.tonesPlayed = [];
+
+        // Trigger loud sound while countdown is running
+        microbit.input.triggerSound(DetectedSound.Loud);
+
+        // No wake-up chirp or smile tones should be played
+        const tones = microbit.tonesPlayed.map(t => t.frequency);
+        expect(tones).not.toContain(587);
+        expect(tones).not.toContain(784);
     });
 });
 

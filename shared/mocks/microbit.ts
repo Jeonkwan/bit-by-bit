@@ -41,6 +41,16 @@ export enum IconNames {
     Scissors = 39,
 }
 
+export enum DetectedSound {
+    Loud = 2,
+    Quiet = 1,
+}
+
+export enum SoundThreshold {
+    Loud = 2,
+    Quiet = 1,
+}
+
 export enum Button {
     A = 1,
     B = 2,
@@ -190,6 +200,8 @@ export class MockLedSprite {
 
 export class MockMicroBit {
     public Button = Button;
+    public DetectedSound = DetectedSound;
+    public SoundThreshold = SoundThreshold;
     public IconNames = IconNames;
     public Gesture = Gesture;
     public DigitalPin = DigitalPin;
@@ -203,6 +215,8 @@ export class MockMicroBit {
 
     public screen: number[][] = Array.from({ length: 5 }, () => Array(5).fill(0));
     public buttonHandlers: Map<Button, Array<() => void>> = new Map();
+    public soundHandlers: Map<DetectedSound, Array<() => void>> = new Map();
+    public soundThresholds: Map<SoundThreshold, number> = new Map();
     public gestureHandlers: Map<Gesture, Array<() => void>> = new Map();
     public pinPressedHandlers: Map<TouchPin, Array<() => void>> = new Map();
     public pinReleasedHandlers: Map<TouchPin, Array<() => void>> = new Map();
@@ -260,6 +274,8 @@ export class MockMicroBit {
     public reset() {
         this.screen = Array.from({ length: 5 }, () => Array(5).fill(0));
         this.buttonHandlers.clear();
+        this.soundHandlers.clear();
+        this.soundThresholds.clear();
         this.gestureHandlers.clear();
         this.pinPressedHandlers.clear();
         this.pinReleasedHandlers.clear();
@@ -380,8 +396,23 @@ export class MockMicroBit {
         lightLevel: () => this.currentLightLevel,
         compassHeading: () => this.currentCompassHeading,
         acceleration: (_dimension: string) => 0,
+        onSound: (sound: DetectedSound, handler: () => void) => {
+            const handlers = this.soundHandlers.get(sound) || [];
+            handlers.push(handler);
+            this.soundHandlers.set(sound, handlers);
+        },
+        soundLevel: () => 0,
+        setSoundThreshold: (sound: SoundThreshold, threshold: number) => {
+            this.soundThresholds.set(sound, threshold);
+        },
 
         // Test helpers
+        triggerSound: (sound: DetectedSound) => {
+            const handlers = this.soundHandlers.get(sound) || [];
+            for (const h of handlers) {
+                h();
+            }
+        },
         pressButton: (button: Button) => {
             this.buttonState.set(button, true);
             const handlers = this.buttonHandlers.get(button) || [];

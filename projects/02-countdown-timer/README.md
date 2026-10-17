@@ -18,34 +18,50 @@ A full-featured BBC micro:bit countdown timer built using Microsoft MakeCode (St
    - **Lockout Protection**: Once the countdown has started (actively running or paused), pad touches are locked and ignored so accidental finger contact will never ruin your timer progress.
    - Configured with `pins.touchSetMode(TouchTarget.*, TouchTargetMode.Capacitive)` for bare-finger tapping on micro:bit V2 without holding GND.
 3. **Gold Touch Logo Controls (V2)**:
-   - **Tap (Short Press - Help / Silence)**:
-     - **Active Only When Stopped/Idle**: Tapping the gold micro:bit logo while the countdown is actively running or paused is ignored, ensuring your active timer is never disturbed.
-     - When idle or setting time, tapping the gold logo scrolls concise help instructions:
-       `"PADS: +1m +5m +10m | A:START/PAUSE | B:RESET"`
-     - **Instant Interruptibility (`led.stopAnimation`)**: Touching any pad (**Pad 0, 1, 2**), pressing **Button A**, pressing **Button B**, or tapping the gold logo again **immediately aborts** the help scroll with zero delay and executes your input on the spot.
+   - **Wake Up Sleeping Device**:
+     - Tapping the gold touch logo while the micro:bit is sleeping immediately wakes it up with the expressive head-shake and smiling animation (`Left -> Right -> Left -> Right -> Center -> Smile`).
+   - **Silence Alarm**:
      - If the alarm is sounding, touching the gold logo immediately silences and dismisses it.
-   - **Long Press (LED Brightness Cycling & Lock)**:
-     - Keep your finger held on the golden logo to cycle the 5x5 LED matrix brightness up to maximum (`255`), wrap back to lowest visible level (`25`), and cycle up again.
-     - Continuous real-time audio pitch feedback rises and falls with the brightness level (`220Hz` to `660Hz`).
-     - Releasing your finger locks the brightness at that exact level and plays a pleasant confirmation chime (`784Hz`).
-4. **Controls**:
+   - **Idle Refresh**:
+     - While awake in idle sandglass, touching the logo resets the idle timer to keep it awake.
+4. **Minute-Passed 3-Beep Chime Presets**:
+   - Every whole minute that passes during an active countdown, the timer plays a randomized, pleasant 3-beep musical motif from a preset library:
+     - `do-re-mi` (`C5 -> D5 -> E5`)
+     - `mi-re-do` (`E5 -> D5 -> C5`)
+     - `di-do-di` (`G5 -> E5 -> G5`)
+     - `do-di-do` (`C5 -> E5 -> C5`)
+     - `do-mi-so` (`C5 -> E5 -> G5`)
+     - `so-mi-do` (`G5 -> E5 -> C5`)
+   - Provides clear auditory tracking of time passing without needing to look at the screen!
+5. **Controls**:
    - **Button A (Play / Pause)**:
      - If stopped: starts the timer (if 0m is set, prompts user to tap pads).
      - If running: pauses the timer and **displays a prominent pause symbol (`||`)**.
      - If paused: unpauses and immediately restores the remaining digits and continues counting down.
    - **Button B (Reset to 0)**:
      - Resets total and remaining time to 0 minutes (`196Hz` reset tone) and returns to the idle animated sandglass.
-5. **Orbiting Edge Dot Activity Indicator**:
+6. **Orbiting Edge Dot Activity Indicator**:
    - The outer perimeter of the 5x5 screen has 16 border LEDs.
    - **&ge; 60s (Minutes mode)**: A dot travels continuously clockwise around the perimeter every 200ms while running, and **freezes in place** when paused.
    - **< 60s (Seconds mode)**: The edge dot turns **completely OFF**, keeping the screen clear and uncluttered for fast-changing second digits.
-6. **Zero-Scroll Static Display Engine**:
+7. **Zero-Scroll Static Display Engine**:
    - **>= 60s**: Shows remaining whole minutes (`1`..`9` centered 3x5, `10`..`99` compact 2x5) without horizontal scrolling delay.
    - **59s to 10s**: Shows remaining 2-digit seconds (`59`, `58`... `10`) in-place using the compact 2x5 font.
    - **Final 9s to 0s**: Displays centered bold single digits (`9` down to `0`) with audible warning ticks on each second.
-7. **Extended Alarm Sequence on Expiry**:
+8. **Extended Alarm Sequence on Expiry**:
    - Plays a long rhythmic multi-tone alert pattern (`880Hz` beeps and `1046Hz` chime) alongside an expanding animated target/diamond shape.
    - **Dismissal**: Pressing **Button A**, **Button B**, or tapping the **Gold Logo** immediately silences the alarm sound and resets to the idle animated sandglass.
+9. **Idle Sleep Mode (Face & Drifting ZZZ Animation)**:
+   - When the timer is left idle at 0m for ~5 seconds (3 complete sandglass cycles), it gently falls asleep to save energy and add character.
+   - Shows a calm resting face (`IconNames.Asleep`), gentle breathing movements, and drifting "Zzz" letter animations floating towards the top of the display.
+10. **Microphone & Logo Wake-Up (micro:bit V2)**:
+   - Configured with a higher 70% loudness threshold (`input.setSoundThreshold(SoundThreshold.Loud, 179)`) to prevent accidental quiet triggers.
+   - When the built-in MEMS microphone detects a loud sound (hand clap, loud voice, snap, or desk tap) OR the user taps the **Golden Logo**:
+     1. **Wakes Up with Surprise**: Startled wide-open eyes appear with a quick alert chirp (`587Hz` D5).
+     2. **Head Shake**: Shakes its face left and right playfully (`Left -> Right -> Left -> Right -> Center`).
+     3. **Smile**: Flashes a warm smiling face (`IconNames.Happy`) accompanied by a cheerful rising arpeggio chime (`C5 -> E5 -> G5`).
+     4. **Return to Sandglass**: Automatically transitions smoothly back to the living sandglass animation.
+   - Any manual interaction (pressing Button A or B, or tapping Pad 0, 1, 2) also instantly wakes the device from sleep.
 
 ---
 
@@ -66,7 +82,7 @@ A full-featured BBC micro:bit countdown timer built using Microsoft MakeCode (St
      +1m +5m +10m    Power Ground
 ```
 
-- **Gold Logo**: Tap for Help instructions (`PADS: +1m +5m +10m | A:START/PAUSE | B:RESET`) / Silence alarm
+- **Gold Logo**: Tap to wake up from sleep (head-shake & smile) / Silence alarm
 - **Pad 0**: Adds +1 Minute
 - **Pad 1**: Adds +5 Minutes
 - **Pad 2**: Adds +10 Minutes
